@@ -341,7 +341,7 @@ export default function Navbar({ user = {}, handleLogout }) {
     }
   };
 
-  /* helper to go to requests page for full view */
+  /* helper to go to requests page for full view */   this is test
   const goToRequestsPage = (item) => {
     setNotifOpen(false);
     navigate("/admin/requests", { state: { highlightId: item?.id } });
