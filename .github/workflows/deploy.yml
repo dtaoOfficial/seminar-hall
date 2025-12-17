@@ -1,0 +1,27 @@
+name: 🚀 Auto Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main   # ✅ triggers only when code is pushed to main branch
+
+jobs:
+  deploy:
+    name: ⚙️ Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧭 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔐 Connect to VPS and Redeploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "🛰️ Starting auto deploy on VPS..."
+            cd /var/www/seminar-hall || exit
+            ./redeploy.sh
+            echo "✅ Auto deploy finished successfully."

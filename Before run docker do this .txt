@@ -1,0 +1,10 @@
+docker stop seminar-frontend seminar-backend seminar-mongo
+docker rm seminar-frontend seminar-backend seminar-mongo
+docker ps -aq | ForEach-Object { docker rm -f $_ }
+docker-compose down -v --remove-orphans
+
+
+
+docker-compose down -v --remove-orphans
+docker-compose build --no-cache
+docker-compose up
