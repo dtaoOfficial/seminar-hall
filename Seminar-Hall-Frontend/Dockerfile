@@ -1,20 +1,23 @@
 # -----------------------------------------------------------
 # Stage 1: Build React app
 # -----------------------------------------------------------
-FROM node:18-alpine AS build
+# ✅ Upgraded to Node 20 for better React 19 support
+FROM node:20-alpine AS build
 WORKDIR /app
 
 # Copy dependency files first
 COPY package*.json ./
-RUN npm install
+
+# ✅ FIXED: Added --legacy-peer-deps to ignore version conflicts with React 19
+RUN npm install --legacy-peer-deps
 
 # Copy rest of the source code
 COPY . .
 
-# 👇 Tell CRA to use production env automatically
+# Tell CRA to use production env automatically
 ENV NODE_ENV=production
 
-# Build the app using the correct environment file (.env.production)
+# Build the app
 RUN npm run build
 
 # -----------------------------------------------------------
