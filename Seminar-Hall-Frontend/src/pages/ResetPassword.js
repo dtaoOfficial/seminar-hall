@@ -1,17 +1,24 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import api from "../utils/api";
+import { useTheme } from "../contexts/ThemeContext";
 
+/* ---------- Helpers ---------- */
 function useQuery() {
   return new URLSearchParams(useLocation().search);
 }
 
+const SPRING = { type: "spring", stiffness: 300, damping: 28 };
+
 export default function ResetPassword() {
+  const { theme } = useTheme() || {};
+  const isDtao = theme === "dtao";
+
   const query = useQuery();
   const navigate = useNavigate();
-  const initialEmail = query.get("email") || "";
-  const [email] = useState(initialEmail);
+  const email = query.get("email") || "";
+
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -20,227 +27,272 @@ export default function ResetPassword() {
 
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
   const newPassRef = useRef(null);
-  const errRef = useRef(null);
 
   useEffect(() => {
-    if (newPassRef.current) newPassRef.current.focus();
+    newPassRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    if (error && errRef.current) errRef.current.focus();
-  }, [error]);
+  /* ---------- Password Strength ---------- */
+  const getPasswordStrength = (pass) => {
+    if (!pass) return 0;
+    let score = 0;
+    if (pass.length >= 6) score++;
+    if (pass.length >= 10) score++;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/\d/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+    return score;
+  };
 
-  function getPasswordStrength(pass) {
-    if (!pass) return "";
-    if (
-      pass.length >= 12 &&
-      /[A-Z]/.test(pass) &&
-      /\d/.test(pass) &&
-      /[^A-Za-z0-9]/.test(pass)
-    )
-      return "strong";
-    if (pass.length >= 8 && (/[A-Z]/.test(pass) || /\d/.test(pass))) return "good";
-    return "weak";
-  }
+  const strength = getPasswordStrength(newPassword);
 
-  async function handleReset(e) {
+  const strengthMeta = () => {
+    if (strength <= 2)
+      return { label: "Weak", bar: "bg-rose-500", text: "text-rose-500" };
+    if (strength <= 4)
+      return { label: "Good", bar: "bg-amber-500", text: "text-amber-500" };
+    return { label: "Strong", bar: "bg-emerald-500", text: "text-emerald-500" };
+  };
+
+  /* ---------- Submit ---------- */
+  const handleReset = async (e) => {
     e.preventDefault();
     setError("");
     setFeedback("");
 
     if (!newPassword || newPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError("Protocol Error: Minimum 6 characters required.");
       return;
     }
     if (newPassword !== confirm) {
-      setError("Passwords do not match.");
+      setError("Logic Error: Passwords do not match.");
       return;
     }
-
-    const normalized = (email || "").trim().toLowerCase();
-    if (!normalized) {
-      setError("Email missing. Start from Forgot Password.");
+    if (!email) {
+      setError("Identity Missing: Restart from Forgot Password.");
       return;
     }
 
     setLoading(true);
     try {
       const res = await api.post("/auth/reset-password", {
-        email: normalized,
+        email: email.trim().toLowerCase(),
         newPassword,
       });
-      if (res && res.status === 200) {
-        setFeedback("Password updated. Redirecting to login...");
-        setTimeout(() => navigate("/"), 1200);
+
+      if (res?.status === 200) {
+        setFeedback("Security Updated: Password synchronized successfully.");
+        setTimeout(() => navigate("/"), 1500);
       } else {
-        setError(res?.data?.error || "Something went wrong — try again later");
+        setError("Update Denied: Server synchronization failed.");
       }
     } catch (err) {
-      const backendErr =
+      setError(
         err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        "Something went wrong — try again later";
-      setError(backendErr);
+          "System Error: Unable to update records."
+      );
     } finally {
       setLoading(false);
     }
-  }
-
-  const strength = getPasswordStrength(newPassword);
-
-  const getStrengthColor = () => {
-    switch (strength) {
-      case "strong":
-        return "text-green-600";
-      case "good":
-        return "text-yellow-600";
-      case "weak":
-        return "text-red-500";
-      default:
-        return "text-gray-500";
-    }
   };
 
+  const meta = strengthMeta();
+
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-[#f8fbff] via-[#edf6ff] to-[#e9f5ff] relative overflow-hidden px-4 py-12">
-      {/* background glow animation */}
+    <div
+      className={`min-h-screen flex flex-col justify-center items-center px-4 relative overflow-hidden transition-colors duration-700 ${
+        isDtao
+          ? "bg-[#08050b]"
+          : "bg-gradient-to-br from-[#f8fbff] via-[#edf6ff] to-[#e9f5ff]"
+      }`}
+    >
+      {/* Ambient Glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <motion.div
-          animate={{ scale: [1, 1.04, 1], opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 6, repeat: Infinity }}
-          className="absolute -top-12 -left-12 w-72 h-72 bg-blue-300/25 rounded-full blur-[96px]"
+          animate={{ scale: [1, 1.1, 1], opacity: [0.25, 0.4, 0.25] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className={`absolute -top-24 -left-24 w-[36rem] h-[36rem] rounded-full blur-[110px] ${
+            isDtao ? "bg-violet-700/20" : "bg-blue-300/25"
+          }`}
         />
         <motion.div
-          animate={{ scale: [1, 1.06, 1], opacity: [0.5, 0.9, 0.5] }}
-          transition={{ duration: 7, repeat: Infinity }}
-          className="absolute -bottom-8 -right-8 w-96 h-96 bg-cyan-200/30 rounded-full blur-[120px]"
+          animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.35, 0.2] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+          className={`absolute -bottom-24 -right-24 w-[40rem] h-[40rem] rounded-full blur-[130px] ${
+            isDtao ? "bg-fuchsia-600/10" : "bg-cyan-200/30"
+          }`}
         />
       </div>
 
-      {/* main glass card */}
+      {/* Card */}
       <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: "easeOut" }}
-        whileHover={{ scale: 1.01 }}
-        className="relative z-10 w-full max-w-sm bg-white/70 backdrop-blur-2xl border border-white/50 rounded-3xl shadow-2xl p-6 md:p-8"
+        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={SPRING}
+        className={`relative z-10 w-full max-w-md rounded-[2.5rem] p-10 backdrop-blur-3xl border shadow-2xl ${
+          isDtao
+            ? "bg-black/40 border-violet-900/50 shadow-violet-950/20"
+            : "bg-white/70 border-white/60 shadow-blue-900/5"
+        }`}
       >
-        <div className="flex flex-col items-center text-center mb-6">
-          <img
+        {/* Header */}
+        <div className="text-center mb-8">
+          <motion.img
+            whileHover={{ scale: 1.05 }}
             src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png"
-            alt="NHCE Logo"
-            className="w-28 md:w-32 mb-3 drop-shadow-md"
+            alt="NHCE"
+            className="w-32 mx-auto mb-6 drop-shadow-2xl"
           />
-          <h1 className="text-2xl font-semibold text-gray-800">Reset Password</h1>
-          <p className="text-gray-600 text-sm mt-1">
-            Set a new password for{" "}
-            <span className="font-medium text-blue-600">{email || "(no email)"}</span>
+          <h1
+            className={`text-3xl font-black ${
+              isDtao ? "text-white" : "text-slate-800"
+            }`}
+          >
+            Secure Reset
+          </h1>
+          <p
+            className={`mt-2 text-sm ${
+              isDtao ? "text-slate-400" : "text-slate-500"
+            }`}
+          >
+            Configure new credentials for:
+            <br />
+            <span className="font-black text-blue-500 break-all">
+              {email || "Unknown User"}
+            </span>
           </p>
         </div>
 
-        {/* form */}
-        <form onSubmit={handleReset} className="space-y-4">
-          {/* new password */}
+        <form onSubmit={handleReset} className="space-y-6">
+          {/* New Password */}
           <div>
-            <label className="text-gray-700 text-sm font-medium">New Password</label>
-            <div className="relative">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              New Access Key
+            </label>
+            <div className="relative mt-2">
               <input
                 ref={newPassRef}
                 type={showNew ? "text" : "password"}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
-                className="w-full mt-2 rounded-xl bg-white/80 border border-gray-200 text-gray-800 placeholder-gray-400 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
-                required
                 disabled={loading}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={`w-full px-6 py-4 rounded-2xl font-bold outline-none border ${
+                  isDtao
+                    ? "bg-white/5 border-violet-800 text-white"
+                    : "bg-white border-slate-200"
+                }`}
+                required
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-500 text-sm transition"
-                onClick={() => setShowNew((s) => !s)}
+                onClick={() => setShowNew(!showNew)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase tracking-widest text-blue-500"
               >
                 {showNew ? "Hide" : "Show"}
               </button>
             </div>
           </div>
 
-          {/* confirm password */}
+          {/* Confirm */}
           <div>
-            <label className="text-gray-700 text-sm font-medium">Confirm Password</label>
-            <div className="relative">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              Verify Access Key
+            </label>
+            <div className="relative mt-2">
               <input
                 type={showConfirm ? "text" : "password"}
                 value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Confirm password"
-                className="w-full mt-2 rounded-xl bg-white/80 border border-gray-200 text-gray-800 placeholder-gray-400 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
-                required
                 disabled={loading}
+                onChange={(e) => setConfirm(e.target.value)}
+                className={`w-full px-6 py-4 rounded-2xl font-bold outline-none border ${
+                  isDtao
+                    ? "bg-white/5 border-violet-800 text-white"
+                    : "bg-white border-slate-200"
+                }`}
+                required
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-500 text-sm transition"
-                onClick={() => setShowConfirm((s) => !s)}
+                onClick={() => setShowConfirm(!showConfirm)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black uppercase tracking-widest text-blue-500"
               >
                 {showConfirm ? "Hide" : "Show"}
               </button>
             </div>
           </div>
 
-          {/* password strength */}
-          <div className={`text-sm mt-1 ${getStrengthColor()}`}>
-            {newPassword
-              ? `Password strength: ${strength}`
-              : "Choose a secure password (min 6 chars)"}
+          {/* Strength */}
+          <div>
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2">
+              <span className="text-slate-500">Security Rating</span>
+              <span className={meta.text}>
+                {newPassword ? meta.label : "Awaiting Input"}
+              </span>
+            </div>
+            <div className="flex gap-1 h-1.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ scaleX: strength >= i ? 1 : 0 }}
+                  className={`flex-1 rounded-full ${
+                    strength >= i ? meta.bar : "bg-transparent"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
 
-          {/* feedback / error */}
-          {feedback && (
-            <div className="text-green-600 text-sm bg-green-100/70 border border-green-300/40 p-2 rounded-lg text-center">
-              {feedback}
-            </div>
-          )}
-          {error && (
-            <div
-              ref={errRef}
-              tabIndex={-1}
-              className="text-red-500 text-sm bg-red-100/70 border border-red-300/40 p-2 rounded-lg text-center"
-            >
-              {error}
-            </div>
-          )}
+          {/* Messages */}
+          <AnimatePresence>
+            {feedback && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-[10px] uppercase font-black tracking-widest text-center bg-emerald-500/10 text-emerald-400 p-4 rounded-xl"
+              >
+                {feedback}
+              </motion.div>
+            )}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-[10px] uppercase font-black tracking-widest text-center bg-rose-500/10 text-rose-400 p-4 rounded-xl"
+              >
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* buttons */}
-          <div className="flex gap-3 pt-2">
+          {/* Actions */}
+          <div className="space-y-4 pt-4">
             <motion.button
-              whileTap={{ scale: 0.97 }}
               whileHover={{ scale: 1.03 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
-              type="submit"
+              whileTap={{ scale: 0.97 }}
               disabled={loading}
-              className="flex-1 py-3 rounded-xl font-semibold text-base bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow-md hover:shadow-lg transition"
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
             >
-              {loading ? "Updating..." : "Update"}
+              {loading ? "Securing..." : "Commit Credentials"}
             </motion.button>
 
             <motion.button
-              whileTap={{ scale: 0.97 }}
-              whileHover={{ scale: 1.03 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
               type="button"
-              onClick={() => navigate("/")}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               disabled={loading}
-              className="flex-1 py-3 rounded-xl font-semibold text-base bg-white/80 border border-gray-200 text-gray-700 hover:text-blue-500 transition"
+              onClick={() => navigate("/")}
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] border bg-white/5 text-slate-400"
             >
-              Back
+              Abort & Return
             </motion.button>
           </div>
         </form>
       </motion.div>
 
-      <footer className="mt-8 text-gray-500 text-xs text-center z-10">
-        © 2025 NHCE Seminar Management Portal — NHCE AquaGlass Theme
+      <footer className="mt-10 text-[10px] uppercase tracking-[0.5em] opacity-30">
+        Credential Protocol © {new Date().getFullYear()} NHCE Engineering
       </footer>
     </div>
   );

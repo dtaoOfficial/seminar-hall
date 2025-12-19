@@ -1,40 +1,30 @@
 // src/hooks/useScrollReveal.js
-import { useEffect } from "react";
+import { useInView } from "framer-motion";
+import { useRef } from "react";
 
 /**
- * useScrollReveal
- * Adds fade-up animation to elements with [data-reveal]
- * Usage:
- *   useScrollReveal();          // activate in a page or layout
- *   <div data-reveal>content</div>
+ * Modern Smooth Reveal Component
+ * Wrap your elements with this instead of just using data-reveal
  */
-export default function useScrollReveal(selector = "[data-reveal]") {
-  useEffect(() => {
-    if (typeof window === "undefined") return; // SSR safe
-    const prefersReduced =
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReduced) return; // accessibility respect
+export const Reveal = ({ children, delay = 0, x = 0, y = 20 }) => {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-100px" });
 
-    const els = Array.from(document.querySelectorAll(selector));
-    if (!els.length) return;
+  return (
+    <div
+      ref={ref}
+      style={{
+        transform: isInView ? "none" : `translateX(${x}px) translateY(${y}px)`,
+        opacity: isInView ? 1 : 0,
+        transition: `all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) ${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
-    const observer = new IntersectionObserver(
-      entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("reveal-active");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12 }
-    );
-
-    els.forEach(el => {
-      el.classList.add("reveal");
-      observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [selector]);
+// Keep this empty export if you are still calling it elsewhere to prevent breakages
+export default function useScrollReveal() {
+  return null; 
 }
