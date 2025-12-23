@@ -1,5 +1,6 @@
 // src/pages/Admin/ManageHallsPage.js
 import React, { useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion"; // Added for smooth animations
 import api from "../../utils/api";
 import { useNotification } from "../../components/NotificationsProvider";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -21,6 +22,7 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
   const [showTable, setShowTable] = useState(true);
   const [showCards, setShowCards] = useState(false);
 
+  // --- Logic Kept Same ---
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -36,65 +38,45 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const fetchHallsInternal = useCallback(
-    async () => {
-      setLoading(true);
-      try {
-        const res = await api.get("/halls");
-        const arr = Array.isArray(res?.data) ? res.data : [];
-        setLocalHalls(arr);
-        if (typeof fetchHalls === "function") {
-          try {
-            await fetchHalls();
-          } catch {}
-        }
-        return arr;
-      } catch (err) {
-        console.error("Error fetching halls:", err);
-        const msg =
-          err?.response?.data?.message ||
-          err?.response?.data ||
-          err.message ||
-          "Failed to fetch halls";
-        notify(`Error fetching halls: ${msg}`, "error", 3500);
-        setLocalHalls([]);
-        return [];
-      } finally {
-        setLoading(false);
+  const fetchHallsInternal = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/halls");
+      const arr = Array.isArray(res?.data) ? res.data : [];
+      setLocalHalls(arr);
+      if (typeof fetchHalls === "function") {
+        try { await fetchHalls(); } catch {}
       }
-    },
-    [fetchHalls, notify]
-  );
+      return arr;
+    } catch (err) {
+      console.error("Error:", err);
+      notify("Failed to fetch halls", "error", 3500);
+      setLocalHalls([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchHalls, notify]);
 
   useEffect(() => {
-    if (!halls || halls.length === 0) {
-      fetchHallsInternal();
-    } else {
-      setLocalHalls(halls);
-    }
+    if (!halls || halls.length === 0) { fetchHallsInternal(); } 
+    else { setLocalHalls(halls); }
   }, [halls, fetchHallsInternal]);
 
-  // Add hall
   const handleAddHall = async (e) => {
     e.preventDefault();
-    if (!newHall.trim()) {
-      notify("Hall name cannot be empty", "warn", 2000);
-      return;
-    }
+    if (!newHall.trim()) { notify("Hall name required", "warn", 2000); return; }
     const capacityNum = Number(newCapacity);
     if (!Number.isInteger(capacityNum) || capacityNum <= 0) {
-      notify("Capacity must be a positive integer", "warn", 2000);
-      return;
+      notify("Invalid capacity", "warn", 2000); return;
     }
     try {
       await api.post("/halls", { name: newHall.trim(), capacity: capacityNum });
-      notify("Hall added successfully", "success", 2000);
-      setNewHall("");
-      setNewCapacity("");
+      notify("Hall added", "success", 2000);
+      setNewHall(""); setNewCapacity("");
       await fetchHallsInternal();
     } catch (err) {
-      console.error("Error adding hall:", err);
-      notify(err?.response?.data?.message || "Failed to add hall", "error", 3500);
+      notify(err?.response?.data?.message || "Failed", "error", 3500);
     }
   };
 
@@ -105,37 +87,29 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
   };
 
   const handleEditHall = async (id) => {
-    if (!editName.trim()) {
-      notify("Hall name cannot be empty", "warn", 2000);
-      return;
-    }
+    if (!editName.trim()) { notify("Name required", "warn", 2000); return; }
     const capacityNum = Number(editCapacity);
     if (!Number.isInteger(capacityNum) || capacityNum <= 0) {
-      notify("Capacity must be a positive integer", "warn", 2000);
-      return;
+      notify("Invalid capacity", "warn", 2000); return;
     }
     try {
       await api.put(`/halls/${id}`, { name: editName.trim(), capacity: capacityNum });
-      notify("Hall updated successfully", "success", 2000);
-      setEditingHall(null);
-      setEditName("");
-      setEditCapacity("");
+      notify("Updated", "success", 2000);
+      setEditingHall(null); setEditName(""); setEditCapacity("");
       await fetchHallsInternal();
     } catch (err) {
-      console.error("Error updating hall:", err);
-      notify(err?.response?.data?.message || "Failed to update hall", "error", 3500);
+      notify("Update failed", "error", 3500);
     }
   };
 
   const handleDeleteHall = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this hall?")) return;
+    if (!window.confirm("Delete this hall?")) return;
     try {
       await api.delete(`/halls/${id}`);
-      notify("Hall deleted successfully", "success", 2000);
+      notify("Deleted", "success", 2000);
       await fetchHallsInternal();
     } catch (err) {
-      console.error("Error deleting hall:", err);
-      notify(err?.response?.data?.message || "Failed to delete hall", "error", 3500);
+      notify("Delete failed", "error", 3500);
     }
   };
 
@@ -143,203 +117,211 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
 
   useEffect(() => {
     const anyOpen = !!editingHall || !!previewUrl;
-    const prev = document.body.style.overflow;
-    if (anyOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = prev || "";
-    return () => {
-      document.body.style.overflow = prev || "";
-    };
+    document.body.style.overflow = anyOpen ? "hidden" : "";
   }, [editingHall, previewUrl]);
 
-  // theme helpers
-  const pageBg = isDtao ? "bg-[#08050b] text-slate-100" : "bg-gray-50 text-slate-900";
-  const cardBg = isDtao ? "bg-black/40 border border-violet-900" : "bg-white";
-  const inputBase = `px-3 py-2 rounded-md focus:outline-none`;
-  const inputLight = `border border-gray-200 bg-white text-slate-900 focus:ring-2 focus:ring-blue-200`;
-  const inputDark = `border border-violet-700 bg-transparent text-slate-100 focus:ring-2 focus:ring-violet-700`;
-  const buttonPrimary = isDtao ? "bg-violet-600 hover:bg-violet-500 text-white" : "bg-blue-600 hover:bg-blue-700 text-white";
-  const buttonMuted = isDtao ? "border border-violet-700 bg-transparent text-slate-100 hover:bg-black/20" : "border border-gray-200 bg-white hover:bg-gray-50 text-slate-900";
+  // --- Theme UI Config ---
+  const buttonPrimary = isDtao ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-violet-500/20" : "bg-gradient-to-r from-blue-600 to-cyan-500 hover:shadow-blue-500/20";
+  const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl" : "bg-white/70 border-white/40 backdrop-blur-md shadow-xl shadow-blue-500/5";
 
   return (
-    <div className={`min-h-screen py-8 ${pageBg}`}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h2 className={`text-2xl font-semibold ${isDtao ? "text-slate-100" : "text-gray-800"}`}>Manage Seminar Halls</h2>
-          <button
-            className={`px-4 py-2 rounded-md transition ${buttonMuted}`}
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      className={`min-h-screen pt-24 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        
+        {/* Header Section */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className={`text-3xl font-bold tracking-tight ${isDtao ? "text-white" : "text-slate-800"}`}>
+              Manage <span className="text-blue-500">Halls</span>
+            </h1>
+            <p className="text-sm opacity-60 mt-1">Configure seminar hall availability and seating capacity</p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm border transition-all ${isDtao ? "border-violet-500/30 bg-violet-500/10 text-violet-300" : "border-blue-200 bg-blue-50 text-blue-600"}`}
             onClick={fetchHallsInternal}
           >
-            Refresh
-          </button>
+            Refresh Data
+          </motion.button>
         </div>
 
-        {/* Add hall form */}
-        <form onSubmit={handleAddHall} className="flex flex-col sm:flex-row gap-3 items-center">
-          <input
-            type="text"
-            placeholder="Enter new hall name"
-            value={newHall}
-            onChange={(e) => setNewHall(e.target.value)}
-            className={`flex-1 ${inputBase} ${isDtao ? inputDark : inputLight}`}
-          />
-          <input
-            type="number"
-            min="1"
-            placeholder="Capacity"
-            value={newCapacity}
-            onChange={(e) => setNewCapacity(e.target.value)}
-            className={`w-32 ${inputBase} ${isDtao ? inputDark : inputLight}`}
-          />
-          <button type="submit" className={`px-4 py-2 rounded-md ${buttonPrimary}`}>
-            Add Hall
-          </button>
-        </form>
-
-        {loading && <p className={`${isDtao ? "text-slate-300" : "text-center text-gray-500"}`}>Loading halls...</p>}
-
-        {!loading && effectiveHalls.length === 0 && (
-          <p className={`${isDtao ? "text-slate-300" : "text-center text-gray-500"}`}>No halls available.</p>
-        )}
-
-        {/* Table View */}
-        {showTable && effectiveHalls.length > 0 && (
-          <div className={`overflow-x-auto ${cardBg} rounded-lg shadow transition-all duration-200`}>
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className={`${isDtao ? "bg-transparent" : "bg-gray-50"}`}>
-                <tr>
-                  <th className={`px-4 py-3 text-left font-medium uppercase tracking-wider ${isDtao ? "text-slate-300" : "text-gray-500"}`}>Hall</th>
-                  <th className={`px-4 py-3 text-left font-medium uppercase tracking-wider ${isDtao ? "text-slate-300" : "text-gray-500"}`}>Capacity</th>
-                  <th className={`px-4 py-3 text-right font-medium uppercase tracking-wider ${isDtao ? "text-slate-300" : "text-gray-500"}`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className={`${isDtao ? "bg-black/40 divide-y divide-violet-800" : "bg-white divide-y divide-gray-100"}`}>
-                {effectiveHalls.map((hall) => (
-                  <tr key={hall.id ?? hall._id} className={`${isDtao ? "hover:bg-black/30" : "hover:bg-gray-50"} transition`}>
-                    <td className="px-4 py-3">{hall.name}</td>
-                    <td className="px-4 py-3">{hall.capacity != null ? hall.capacity : "-"}</td>
-                    <td className="px-4 py-3 text-right space-x-2">
-                      <button
-                        className={`px-3 py-1.5 rounded-md ${isDtao ? "bg-amber-600/10 text-amber-300" : "bg-yellow-50 text-yellow-800"} hover:opacity-95`}
-                        onClick={() => openEdit(hall)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className={`px-3 py-1.5 rounded-md ${isDtao ? "bg-rose-600/10 text-rose-300" : "bg-rose-50 text-rose-700"} hover:opacity-95`}
-                        onClick={() => handleDeleteHall(hall.id ?? hall._id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Add Hall Form (Glass Layout) */}
+        <motion.form 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          onSubmit={handleAddHall} 
+          className={`p-6 rounded-3xl border ${glassCard} flex flex-col sm:flex-row gap-4 items-center`}
+        >
+          <div className="flex-1 w-full">
+            <label className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-1.5 block px-1">Hall Name</label>
+            <input
+              type="text"
+              placeholder="Ex: APJ Abdul Kalam Hall"
+              value={newHall}
+              onChange={(e) => setNewHall(e.target.value)}
+              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500"}`}
+            />
           </div>
-        )}
+          <div className="w-full sm:w-32">
+            <label className="text-[10px] uppercase font-bold tracking-widest opacity-50 mb-1.5 block px-1">Capacity</label>
+            <input
+              type="number"
+              min="1"
+              placeholder="000"
+              value={newCapacity}
+              onChange={(e) => setNewCapacity(e.target.value)}
+              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500"}`}
+            />
+          </div>
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="submit" 
+            className={`w-full sm:w-auto mt-4 sm:mt-5 px-8 py-3 rounded-2xl font-bold text-white shadow-lg transition-all ${buttonPrimary}`}
+          >
+            Add Hall
+          </motion.button>
+        </motion.form>
 
-        {/* Mobile Cards */}
-        {showCards && effectiveHalls.length > 0 && (
-          <div className="space-y-4">
-            {effectiveHalls.map((hall) => (
-              <div key={hall.id ?? hall._id} className={`${cardBg} p-4 rounded-lg shadow space-y-2 transition`}>
-                <div className="flex items-center justify-between">
-                  <h3 className={`text-lg font-semibold ${isDtao ? "text-slate-100" : "text-gray-900"}`}>{hall.name}</h3>
-                  <span className={`${isDtao ? "text-slate-300" : "text-sm text-gray-600"}`}>Capacity: {hall.capacity ?? "-"}</span>
-                </div>
-
-                <div className="flex gap-2 overflow-x-auto">
-                  {(hall.photos || []).slice(0, 3).map((p, i) => (
-                    // clicking opens preview
-                    // no extra theme needed for images
-                    <img
-                      key={i}
-                      src={p}
-                      alt={`hall-${i}`}
-                      className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-80"
-                      onClick={() => setPreviewUrl(p)}
-                    />
+        {/* Table View (Desktop) */}
+        <AnimatePresence>
+          {showTable && !loading && effectiveHalls.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`rounded-3xl border overflow-hidden ${glassCard}`}
+            >
+              <table className="w-full text-left">
+                <thead>
+                  <tr className={`border-b ${isDtao ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50/50"}`}>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest opacity-60">Seminar Hall Name</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest opacity-60">Max Seating</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest opacity-60 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {effectiveHalls.map((hall) => (
+                    <motion.tr 
+                      key={hall.id ?? hall._id} 
+                      className={`group transition-colors ${isDtao ? "hover:bg-white/5" : "hover:bg-blue-50/50"}`}
+                    >
+                      <td className="px-6 py-4 font-semibold">{hall.name}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 text-xs font-bold">
+                          {hall.capacity || "—"} seats
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button onClick={() => openEdit(hall)} className="p-2 rounded-xl bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white transition-all">
+                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                        <button onClick={() => handleDeleteHall(hall.id ?? hall._id)} className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </td>
+                    </motion.tr>
                   ))}
-                </div>
+                </tbody>
+              </table>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-                <div className="flex gap-2">
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-xs ${isDtao ? "bg-amber-600/10 text-amber-300" : "bg-yellow-50 text-yellow-800"}`}
-                    onClick={() => openEdit(hall)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-xs ${isDtao ? "bg-rose-600/10 text-rose-300" : "bg-rose-50 text-rose-700"}`}
-                    onClick={() => handleDeleteHall(hall.id ?? hall._id)}
-                  >
-                    Delete
-                  </button>
+        {/* Mobile View (Cards) */}
+        {showCards && !loading && (
+          <div className="grid grid-cols-1 gap-4">
+            {effectiveHalls.map((hall) => (
+              <motion.div 
+                layout
+                key={hall.id ?? hall._id} 
+                className={`p-5 rounded-3xl border ${glassCard} space-y-4`}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-lg">{hall.name}</h3>
+                    <p className="text-xs opacity-50 font-medium">Capacity: {hall.capacity ?? "—"} Pax</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(hall)} className="p-2 rounded-xl bg-amber-500/10 text-amber-600">Edit</button>
+                    <button onClick={() => handleDeleteHall(hall.id ?? hall._id)} className="p-2 rounded-xl bg-red-500/10 text-red-600">Delete</button>
+                  </div>
                 </div>
-              </div>
+                {hall.photos?.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {hall.photos.map((p, i) => (
+                      <img key={i} src={p} onClick={() => setPreviewUrl(p)} className="w-20 h-20 rounded-2xl object-cover border border-white/10 cursor-pointer" alt="hall" />
+                    ))}
+                  </div>
+                )}
+              </motion.div>
             ))}
           </div>
         )}
 
-        {/* Edit Modal */}
-        {editingHall && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className={`${isDtao ? "bg-black/60 border border-violet-900 text-slate-100" : "bg-white"} rounded-lg shadow-lg w-full max-w-md p-6 space-y-4 transition-transform duration-200 transform`}>
-              <h3 className={`text-lg font-semibold ${isDtao ? "text-slate-100" : "text-gray-800"}`}>Edit Hall</h3>
+        {/* Status Messages */}
+        {loading && <div className="py-20 text-center opacity-40 animate-pulse">Synchronizing halls...</div>}
+        {!loading && effectiveHalls.length === 0 && <div className="py-20 text-center opacity-40">No halls found in the database.</div>}
 
-              <input
-                className={`${inputBase} w-full ${isDtao ? inputDark : inputLight}`}
-                placeholder="Hall name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+        {/* Edit Modal (Kyr Style) */}
+        <AnimatePresence>
+          {editingHall && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setEditingHall(null)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-md" 
               />
-
-              <input
-                className={`${inputBase} w-full ${isDtao ? inputDark : inputLight}`}
-                placeholder="Capacity"
-                type="number"
-                min="1"
-                value={editCapacity}
-                onChange={(e) => setEditCapacity(e.target.value)}
-              />
-
-              <div className="flex justify-end gap-3">
-                <button
-                  className={`px-4 py-2 rounded-md ${isDtao ? "border border-violet-700 bg-transparent text-slate-100 hover:bg-black/20" : "border border-gray-200 bg-white hover:bg-gray-50"}`}
-                  onClick={() => { setEditingHall(null); setEditName(""); setEditCapacity(""); }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className={`px-4 py-2 rounded-md ${buttonPrimary}`}
-                  onClick={() => handleEditHall(editingHall)}
-                >
-                  Save
-                </button>
-              </div>
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className={`relative w-full max-w-md p-8 rounded-[2rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white border-white"}`}
+              >
+                <h3 className="text-xl font-bold mb-6">Modify Venue Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold opacity-50 ml-1">Venue Name</label>
+                    <input className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} value={editName} onChange={(e) => setEditName(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold opacity-50 ml-1">Seating Capacity</label>
+                    <input type="number" className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} value={editCapacity} onChange={(e) => setEditCapacity(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-8">
+                  <button onClick={() => setEditingHall(null)} className="flex-1 py-3 rounded-2xl font-bold bg-slate-500/10 text-slate-500">Cancel</button>
+                  <button onClick={() => handleEditHall(editingHall)} className={`flex-1 py-3 rounded-2xl font-bold text-white ${buttonPrimary}`}>Save Changes</button>
+                </div>
+              </motion.div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
 
-        {/* Photo Preview Modal */}
-        {previewUrl && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setPreviewUrl(null)}
-          >
-            <div className="absolute inset-0 bg-black/70" />
-            <img
-              src={previewUrl}
-              alt="preview"
-              className="relative max-h-[90vh] max-w-full rounded-lg shadow-lg transition-transform duration-300"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-        )}
+        {/* Photo Preview (Kyr Style) */}
+        <AnimatePresence>
+          {previewUrl && (
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl"
+              onClick={() => setPreviewUrl(null)}
+            >
+              <motion.img 
+                initial={{ scale: 0.8 }} animate={{ scale: 1 }}
+                src={previewUrl} className="max-h-[85vh] max-w-full rounded-3xl shadow-2xl border-4 border-white/10" 
+              />
+              <button className="absolute top-6 right-6 text-white text-3xl opacity-50 hover:opacity-100">✕</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       </div>
-    </div>
+    </motion.div>
   );
 };
 

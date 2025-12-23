@@ -316,7 +316,16 @@ public class SeminarService {
     // -------------------------
     public Seminar requestCancel(String id, String cancellationReason, String remarks) {
         return seminarRepository.findById(id).map(existing -> {
+
+            // NEW: Prevent cancel within 1 hour of event start
+            if (isWithinOneHourOfStart(existing)) {
+                throw new RuntimeException(
+                        "Cancellation not allowed within 1 hour before event start time."
+                );
+            }
+
             existing.setStatus("CANCEL_REQUESTED");
+
 
             if (cancellationReason != null && !cancellationReason.isBlank()) {
                 existing.setCancellationReason(cancellationReason);
@@ -890,5 +899,38 @@ public class SeminarService {
     public List<Seminar> getByStatus(String status) {
         return seminarRepository.findByStatusIgnoreCase(status);
     }
+
+    /**
+     * NEW: Block cancellation if seminar starts within 1 hour
+     */
+    private boolean isWithinOneHourOfStart(Seminar s) {
+        try {
+            String dateStr = s.getStartDate() != null ? s.getStartDate() : s.getDate();
+            if (dateStr == null) return false;
+
+            LocalDate eventDate = LocalDate.parse(dateStr, DATE_FMT);
+            java.time.LocalTime eventTime;
+
+            if (s.getStartTime() != null && !s.getStartTime().isBlank()) {
+                eventTime = java.time.LocalTime.parse(s.getStartTime());
+            } else {
+                eventTime = java.time.LocalTime.MIDNIGHT;
+            }
+
+            java.time.LocalDateTime eventStart =
+                    java.time.LocalDateTime.of(eventDate, eventTime);
+
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+            long diffMinutes =
+                    java.time.Duration.between(now, eventStart).toMinutes();
+
+            // lock if <= 60 minutes or already started
+            return diffMinutes <= 60;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
 
 }

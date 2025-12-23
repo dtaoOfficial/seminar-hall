@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import api from "../../utils/api";
 // removed react-toastify usage; using custom notify
 import { useNotification } from "../../components/NotificationsProvider";
- // adjust path if your provider lives elsewhere
+// adjust path if your provider lives elsewhere
 import { useNavigate } from "react-router-dom";
 import { generateCardPDF } from "../../utils/generateCardPDF";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -159,7 +159,6 @@ const DeptHistory = ({ user }) => {
   };
 
   const filteredView = seminars.filter((s) => {
-    // If filterDate used: consider day-range as matching if the filter date is between startDate and endDate
     if (filterDate) {
       if (s.startDate && s.endDate) {
         const f = new Date(filterDate); f.setHours(0,0,0,0);
@@ -182,7 +181,6 @@ const DeptHistory = ({ user }) => {
     return true;
   });
 
-  // toggle expand for 'more' area
   const toggleExpanded = (id) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -192,7 +190,6 @@ const DeptHistory = ({ user }) => {
     });
   };
 
-  // small status pill (theme-aware)
   const StatusPill = ({ status = "" }) => {
     const s = (status || "").toUpperCase();
     const base = "inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold";
@@ -201,15 +198,12 @@ const DeptHistory = ({ user }) => {
     return <span className={`${base} ${isDtao ? "bg-slate-800 text-slate-300" : "bg-gray-100 text-gray-800"}`}>{s || "N/A"}</span>;
   };
 
-  // theme helpers
   const pageBg = isDtao ? "bg-[#08050b] text-slate-100" : "bg-gray-50 text-slate-900";
   const cardBg = isDtao ? "bg-black/40 border border-violet-900" : "bg-white border border-gray-100";
   const inputBase = "px-3 py-2 rounded-md focus:ring-2 focus:outline-none";
   const inputClass = isDtao ? `${inputBase} bg-transparent border-violet-700 text-slate-100` : `${inputBase} bg-white border border-gray-200`;
 
-  // helper to render per-day details from a seminar's daySlots or start/end
   const renderPerDayDetails = (s) => {
-    // If seminar has daySlots: iterate keys (which stored by AddSeminarPage)
     if (s.daySlots && typeof s.daySlots === "object") {
       const keys = Object.keys(s.daySlots).sort();
       if (keys.length === 0) return <div className="text-sm text-slate-400">No per-day details</div>;
@@ -228,12 +222,10 @@ const DeptHistory = ({ user }) => {
       );
     }
 
-    // If startDate/endDate exist but no daySlots: show as full-day range
     if (s.startDate && s.endDate) {
       return <div className="text-sm">Full-day range: <strong>{s.startDate}</strong> → <strong>{s.endDate}</strong></div>;
     }
 
-    // Fallback: if single date with start/end times
     if (s.date) {
       return <div className="text-sm">{(s.date || "").split("T")[0]}: {s.startTime || "--"} — {s.endTime || "--"}</div>;
     }
@@ -241,12 +233,9 @@ const DeptHistory = ({ user }) => {
     return <div className="text-sm text-slate-400">No extra details</div>;
   };
 
-  // NEW: render remarks history as list inside expanded area
   const renderRemarksHistory = (s) => {
     const raw = s.remarks || "";
     if (!raw.trim()) return <div className="text-sm text-slate-400">No remarks</div>;
-
-    // Split using " | " which backend uses when concatenating
     const parts = raw.split(" | ").map(p => p.trim()).filter(Boolean);
     if (parts.length === 0) return <div className="text-sm text-slate-400">No remarks</div>;
 
@@ -257,6 +246,29 @@ const DeptHistory = ({ user }) => {
         ))}
       </ol>
     );
+  };
+
+  // NEW: Helper - check if event is within 1 hour before start or already started
+  const isActionLocked = (s) => {
+    try {
+      const now = new Date();
+      let eventDate = s.startDate || s.date;
+      if (!eventDate) return false;
+
+      const eventStart = new Date(eventDate);
+
+      if (s.startTime) {
+        const [h, m] = s.startTime.split(":").map(Number);
+        eventStart.setHours(h || 0, m || 0, 0, 0);
+      } else {
+        eventStart.setHours(0, 0, 0, 0);
+      }
+
+      const diffMs = eventStart - now;
+      return diffMs <= 3600000; // <= 1 hour before event start
+    } catch {
+      return false;
+    }
   };
 
   return (
@@ -329,8 +341,11 @@ const DeptHistory = ({ user }) => {
                     const isExpanded = expanded.has(s.id);
                     const displayDate = s.startDate && s.endDate ? `${s.startDate} → ${s.endDate}` : (s.date || "").split("T")[0];
                     const slotLabel = s.slot || (s.daySlots ? "DayRange" : "--");
-                    // show only first/most recent remark in-cell (truncate) — full history in expanded area
                     const latestRemark = (s.remarks || "").split(" | ").filter(Boolean).pop() || "";
+                    
+                    // Locked logic
+                    const locked = isActionLocked(s);
+
                     return (
                       <React.Fragment key={s.id}>
                         <tr
@@ -342,7 +357,6 @@ const DeptHistory = ({ user }) => {
                           <td className="px-4 py-3 text-sm">
                             <div className="font-medium">{slotLabel}</div>
                             <div className={`${isDtao ? "text-slate-300" : "text-xs text-gray-500"}`}>
-                              {/* show summary times: if daySlots exists, try to show first day's times or show range */}
                               {s.daySlots
                                 ? (() => {
                                     const keys = Object.keys(s.daySlots || {}).sort();
@@ -362,7 +376,6 @@ const DeptHistory = ({ user }) => {
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-2">
                               <div className="truncate">{latestRemark || "—"}</div>
-                              {/* More toggle */}
                               <button
                                 onClick={() => toggleExpanded(s.id)}
                                 className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -375,19 +388,39 @@ const DeptHistory = ({ user }) => {
                           </td>
                           <td className="px-4 py-3 text-sm text-center">
                             {s.status === "APPROVED" && (
-                              <div className="flex flex-col sm:flex-row items-center gap-2 justify-center">
-                                <button
-                                  onClick={() => generateCardPDF(s)}
-                                  className="px-3 py-1 rounded-md bg-blue-600 text-white hover:shadow-md transition text-sm"
-                                >
-                                  Download Card
-                                </button>
-                                <button
-                                  onClick={() => handleRequestCancel(s)}
-                                  className={`${isDtao ? "px-3 py-1 rounded-md bg-rose-600/10 text-rose-300 hover:bg-rose-600/20" : "px-3 py-1 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100"} transition text-sm`}
-                                >
-                                  Request Cancel
-                                </button>
+                              <div className="flex flex-col items-center gap-2 justify-center">
+                                <div className="flex flex-col sm:flex-row items-center gap-2">
+                                    <button
+                                        onClick={() => !locked && generateCardPDF(s)}
+                                        disabled={locked}
+                                        className={`px-3 py-1 rounded-md text-sm transition ${
+                                        locked
+                                            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                            : "bg-blue-600 text-white hover:shadow-md"
+                                        }`}
+                                    >
+                                        Download Card
+                                    </button>
+
+                                    <button
+                                        onClick={() => !locked && handleRequestCancel(s)}
+                                        disabled={locked}
+                                        className={`px-3 py-1 rounded-md text-sm transition ${
+                                        locked
+                                            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                            : isDtao
+                                            ? "bg-rose-600/10 text-rose-300 hover:bg-rose-600/20"
+                                            : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                        }`}
+                                    >
+                                        Request Cancel
+                                    </button>
+                                </div>
+                                {locked && (
+                                    <div className="text-[10px] text-gray-500 italic mt-1">
+                                        Actions locked (event started)
+                                    </div>
+                                )}
                               </div>
                             )}
                             {s.status === "CANCEL_REQUESTED" && (
@@ -398,7 +431,6 @@ const DeptHistory = ({ user }) => {
                           </td>
                         </tr>
 
-                        {/* Expanded "More" row showing per-day breakdown + remarks history */}
                         {isExpanded && (
                           <tr className={isDtao ? "bg-black/30" : "bg-gray-50"}>
                             <td colSpan={9} className="px-4 py-3">
@@ -409,7 +441,6 @@ const DeptHistory = ({ user }) => {
                                     {renderPerDayDetails(s)}
                                   </div>
                                 </div>
-
                                 <div>
                                   <strong>Remarks history:</strong>
                                   <div className="mt-2">
@@ -436,6 +467,9 @@ const DeptHistory = ({ user }) => {
                 const displayDate = s.startDate && s.endDate ? `${s.startDate} → ${s.endDate}` : (s.date || "").split("T")[0];
                 const slotLabel = s.slot || (s.daySlots ? "DayRange" : "--");
                 const latestRemark = (s.remarks || "").split(" | ").filter(Boolean).pop() || "";
+                
+                const locked = isActionLocked(s);
+
                 return (
                   <article
                     key={s.id}
@@ -469,14 +503,12 @@ const DeptHistory = ({ user }) => {
                           <div><strong>By:</strong> {s.bookingName}</div>
                           <div className="mt-2"><strong>Remarks:</strong> {latestRemark || "—"}</div>
 
-                          {/* expanded per-day details + remarks history */}
                           {isExpanded && (
                             <div className="mt-3 space-y-3">
                               <div>
                                 <div className="text-sm font-medium mb-1">Per-day details</div>
                                 {renderPerDayDetails(s)}
                               </div>
-
                               <div>
                                 <div className="text-sm font-medium mb-1">Remarks history</div>
                                 {renderRemarksHistory(s)}
@@ -491,17 +523,35 @@ const DeptHistory = ({ user }) => {
                         {s.status === "APPROVED" ? (
                           <>
                             <button
-                              onClick={() => generateCardPDF(s)}
-                              className="px-3 py-1 rounded-md bg-blue-600 text-white hover:shadow-md transition text-sm"
+                                onClick={() => !locked && generateCardPDF(s)}
+                                disabled={locked}
+                                className={`px-3 py-1 rounded-md text-sm transition ${
+                                locked
+                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                    : "bg-blue-600 text-white hover:shadow-md"
+                                }`}
                             >
-                              Download Card
+                                Download Card
                             </button>
+
                             <button
-                              onClick={() => handleRequestCancel(s)}
-                              className={`${isDtao ? "px-3 py-1 rounded-md bg-rose-600/10 text-rose-300 hover:bg-rose-600/20" : "px-3 py-1 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100"} transition text-sm`}
+                                onClick={() => !locked && handleRequestCancel(s)}
+                                disabled={locked}
+                                className={`px-3 py-1 rounded-md text-sm transition ${
+                                locked
+                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                    : isDtao
+                                    ? "bg-rose-600/10 text-rose-300 hover:bg-rose-600/20"
+                                    : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                }`}
                             >
-                              Request Cancel
+                                Request Cancel
                             </button>
+                            {locked && (
+                                <div className="text-[10px] text-gray-500 italic">
+                                    Actions locked (event started)
+                                </div>
+                            )}
                           </>
                         ) : (
                           <button className="px-3 py-1 rounded-md border text-sm" disabled>

@@ -1,15 +1,14 @@
 // src/pages/Admin/AllSeminarsPage.jsx
-import React, { useState, useEffect, useCallback, useRef } from "react"; // <-- added useRef
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion"; // Added for Kyr smoothness
 import api from "../../utils/api";
 import { useNotification } from "../../components/NotificationsProvider";
 import { useTheme } from "../../contexts/ThemeContext";
 
 /**
- * AllSeminarsPage — Tailwind + theme-aware
- * - Removed Edit button
- * - Replaced with Update Hall button which opens a halls picker and updates only hallName
- * - After successful update shows a small inline confirmation card for 5s
- * - Did NOT change delete logic or any backend calls other than PUT /seminars/:id for hall update
+ * AllSeminarsPage — Enhanced UI Version
+ * Logic: Full preservation of deduping, normalization, and wheel-scroll.
+ * UI: Glass theme, smooth transitions, premium status pills.
  */
 
 const STATUS_APPROVED = "APPROVED";
@@ -37,17 +36,17 @@ const AllSeminarsPage = () => {
 
   // Change-hall modal
   const [changeHallOpen, setChangeHallOpen] = useState(false);
-  const [changeTarget, setChangeTarget] = useState(null); // seminar object
+  const [changeTarget, setChangeTarget] = useState(null); 
   const [hallsList, setHallsList] = useState([]);
   const [hallsLoading, setHallsLoading] = useState(false);
   const [updatingHall, setUpdatingHall] = useState(false);
 
-  // transient inline confirmation map: { [seminarId]: { hall: string, expiresAt: Date } }
+  // transient inline confirmation map
   const [confirmMap, setConfirmMap] = useState({});
 
-  // --- NEW: ref for table scroll container ---
   const tableScrollRef = useRef(null);
 
+  // --- Logic Block: Normalization (Fully Preserved) ---
   const normalizeSeminar = (s) => ({
     id: s.id ?? s._id ?? s.seminarId ?? `seminar-${Math.random()}`,
     hallName: s.hallName ?? s.hall ?? "",
@@ -96,21 +95,19 @@ const AllSeminarsPage = () => {
     return [];
   };
 
+  // --- Logic Block: Fetching & Deduping (Fully Preserved) ---
   const fetchSeminars = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const [seminarRes, requestRes] = await Promise.allSettled([api.get("/seminars"), api.get("/requests")]);
 
-      const rawSeminars =
-        seminarRes.status === "fulfilled" ? ensureArray(seminarRes.value.data ?? seminarRes.value) : [];
-      const rawRequests =
-        requestRes.status === "fulfilled" ? ensureArray(requestRes.value.data ?? requestRes.value) : [];
+      const rawSeminars = seminarRes.status === "fulfilled" ? ensureArray(seminarRes.value.data ?? seminarRes.value) : [];
+      const rawRequests = requestRes.status === "fulfilled" ? ensureArray(requestRes.value.data ?? requestRes.value) : [];
 
       const seminarList = rawSeminars.map(normalizeSeminar);
       const requestList = rawRequests.map(normalizeRequest);
 
-      // dedupe by hall|date|start|end|title preferring seminar over request
       const seen = new Map();
       const keyFor = (it) =>
         `${(it.hallName || "").trim()}|${(it.date || "").trim()}|${(it.startTime || "").trim()}|${(it.endTime || "").trim()}|${(it.slotTitle || "").trim()}`;
@@ -136,44 +133,36 @@ const AllSeminarsPage = () => {
       });
 
       setSeminars(combined);
-      // eslint-disable-next-line no-console
-      console.debug("Fetched", { rawSeminars: rawSeminars.length, rawRequests: rawRequests.length, combined: combined.length });
+      console.debug("Fetched", { combined: combined.length });
     } catch (err) {
       console.error("Fetch error", err);
-      setError("Failed to fetch seminars/requests. Check console/network.");
+      setError("Failed to fetch data.");
       notify("Failed to fetch seminars/requests", "error", 3500);
     } finally {
       setLoading(false);
     }
   }, [notify]);
 
-  useEffect(() => {
-    fetchSeminars();
-  }, [fetchSeminars]);
+  useEffect(() => { fetchSeminars(); }, [fetchSeminars]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
     const mq = window.matchMedia("(min-width: 768px)");
     const apply = (ev) => setIsDesktopView(Boolean(ev.matches));
     setIsDesktopView(Boolean(mq.matches));
-    mq.addEventListener ? mq.addEventListener("change", apply) : mq.addListener(apply);
-    return () => {
-      mq.removeEventListener ? mq.removeEventListener("change", apply) : mq.removeListener(apply);
-    };
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, []);
 
   const formatAppliedAt = (isoOrStr) => {
     if (!isoOrStr) return "--";
     try {
       const d = new Date(isoOrStr);
-      if (isNaN(d.getTime())) return isoOrStr;
-      return d.toLocaleString();
-    } catch {
-      return isoOrStr;
-    }
+      return isNaN(d.getTime()) ? isoOrStr : d.toLocaleString();
+    } catch { return isoOrStr; }
   };
 
-  // --- existing behavior: Delete (kept intact) ---
+  // --- Logic Block: Delete (Kept Intact) ---
   const handleDelete = async (item) => {
     const ok = window.confirm(`Delete this ${item.source === "request" ? "booking request" : "seminar"}?`);
     if (!ok) return;
@@ -187,15 +176,12 @@ const AllSeminarsPage = () => {
       setSeminars((prev) => prev.filter((s) => s.id !== item.id));
       notify("Deleted successfully", "success", 2200);
     } catch (err) {
-      console.error("Error deleting item:", err?.response || err);
-      const serverMsg =
-        (err.response && (err.response.data?.message || err.response.data)) || err.message || "Failed to delete";
+      const serverMsg = (err.response && (err.response.data?.message || err.response.data)) || err.message || "Failed to delete";
       notify(String(serverMsg), "error", 4000);
     }
   };
-  // -------------------------------------------------------
 
-  // Filters: client-side filter on seminars array
+  // --- Filters ---
   const filteredSeminars = seminars.filter((s) => {
     if (filterDept && !(s.department || "").toLowerCase().includes(filterDept.toLowerCase())) return false;
     if (filterTitle && !(s.slotTitle || "").toLowerCase().includes(filterTitle.toLowerCase())) return false;
@@ -203,7 +189,7 @@ const AllSeminarsPage = () => {
     return true;
   });
 
-  // Fetch halls list (attempt server endpoint /halls, fallback to unique from seminars)
+  // --- Logic Block: Hall Loading ---
   const loadHalls = async () => {
     setHallsLoading(true);
     try {
@@ -211,13 +197,11 @@ const AllSeminarsPage = () => {
       try {
         const res = await api.get("/halls");
         if (res && Array.isArray(res.data)) remote = res.data.map((h) => (typeof h === "string" ? h : h.name || h.hallName || h.id));
-      } catch (e) {
-        // ignore - fallback will be used
-      }
+      } catch (e) {}
+      
       if (remote.length > 0) {
         setHallsList(remote);
       } else {
-        // dedupe halls from seminars
         const uniques = Array.from(new Set(seminars.map((s) => (s.hallName || "").trim()).filter(Boolean))).sort();
         setHallsList(uniques);
       }
@@ -229,11 +213,9 @@ const AllSeminarsPage = () => {
     }
   };
 
-  // Open change-hall modal
   const openChangeHall = async (seminar) => {
     setChangeTarget(seminar);
     setChangeHallOpen(true);
-    // load halls if not loaded
     if (hallsList.length === 0) await loadHalls();
   };
 
@@ -242,28 +224,23 @@ const AllSeminarsPage = () => {
     setChangeTarget(null);
   };
 
-  // Update hall for a seminar (only hallName changed)
+  // --- Logic Block: PUT Hall Update (Kept Intact) ---
   const confirmChangeHall = async (seminarId, newHallName) => {
     if (!seminarId) return;
     setUpdatingHall(true);
     try {
-      // call backend to update only hallName (keep other fields intact)
       await api.put(`/seminars/${seminarId}`, { hallName: newHallName });
-      // update local copy
       setSeminars((prev) => prev.map((s) => (s.id === seminarId ? { ...s, hallName: newHallName } : s)));
 
-      // set a transient inline confirmation card that auto-hides after 5s
-      setConfirmMap((prev) => {
-        const next = { ...prev };
-        next[seminarId] = { hall: newHallName, expiresAt: Date.now() + 5000 };
-        return next;
-      });
+      setConfirmMap((prev) => ({
+        ...prev,
+        [seminarId]: { hall: newHallName, expiresAt: Date.now() + 5000 }
+      }));
+      
       setTimeout(() => {
         setConfirmMap((prev) => {
           const next = { ...prev };
-          if (next[seminarId] && Date.now() >= next[seminarId].expiresAt) {
-            delete next[seminarId];
-          }
+          if (next[seminarId] && Date.now() >= next[seminarId].expiresAt) delete next[seminarId];
           return next;
         });
       }, 5200);
@@ -271,334 +248,231 @@ const AllSeminarsPage = () => {
       notify("Hall updated", "success", 2200);
       closeChangeHall();
     } catch (err) {
-      console.error("Error updating hall:", err);
       notify(err?.response?.data?.message || "Failed to update hall", "error", 3500);
     } finally {
       setUpdatingHall(false);
     }
   };
 
-  // theme helpers
-  const pageBg = isDtao ? "bg-[#08050b] text-slate-100" : "bg-gray-50 text-slate-900";
-  const containerBg = isDtao ? "bg-black/40 border border-violet-900" : "bg-white border border-gray-100";
-  const mutedText = isDtao ? "text-slate-300" : "text-gray-500";
-  const headingText = isDtao ? "text-slate-100" : "text-gray-800";
-  const tableHeadBg = isDtao ? "bg-transparent" : "bg-gray-50";
-  const rowHover = isDtao ? "hover:bg-black/30" : "hover:bg-gray-50";
-  const divider = isDtao ? "divide-violet-800" : "divide-gray-200";
-
-  // --- NEW: wheel handler that maps vertical wheel to horizontal scroll when hovering the table ---
+  // --- Logic Block: Mouse Wheel Scroll (Fully Preserved) ---
   const handleWheel = useCallback((e) => {
-    // If native horizontal scroll is present (user used horizontal wheel), let it through
     if (Math.abs(e.deltaX) > 0) return;
-    // Only intercept vertical wheel when there's horizontal overflow
     const el = e.currentTarget;
-    if (!el) return;
-    if (el.scrollWidth <= el.clientWidth) return; // no overflow -> don't intercept
-    // Map vertical movement to horizontal scroll
+    if (!el || el.scrollWidth <= el.clientWidth) return;
     e.preventDefault();
-    // small multiplier to make scroll feel natural on desktop mice
-    const multiplier = 1;
-    el.scrollLeft += e.deltaY * multiplier;
+    el.scrollLeft += e.deltaY;
   }, []);
 
+  // --- Kyr UI Styling Helpers ---
+  const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl shadow-2xl" : "bg-white/80 border-white/40 backdrop-blur-md shadow-xl shadow-blue-500/5";
+
   return (
-    <div className={`min-h-screen py-8 ${pageBg}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        {/* Top */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <motion.div 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      className={`min-h-screen pt-24 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        
+        {/* Header Section */}
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+          className="flex flex-col md:flex-row md:items-center justify-between gap-6"
+        >
           <div>
-            <h2 className={`text-2xl font-semibold ${headingText}`}>All Seminars (Update Hall / Delete)</h2>
-            <p className={`${mutedText} text-sm mt-1`}>Combined view of confirmed seminars and booking requests. Edit removed — use Update Hall to change venue.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Master <span className="text-blue-500">Record List</span></h1>
+            <p className="text-sm opacity-60 mt-1">Full synchronization of seminars and venue requests</p>
           </div>
-
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => fetchSeminars()}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition transform ${isDtao ? "bg-violet-700 text-white hover:bg-violet-600" : "bg-white border border-gray-200 hover:shadow-md"} `}
+            <motion.button
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              onClick={fetchSeminars}
+              className={`px-6 py-3 rounded-2xl font-bold text-sm shadow-lg transition-all ${isDtao ? "bg-violet-600 text-white" : "bg-white border text-slate-700"}`}
             >
-              Refresh
-            </button>
+              Refresh Data
+            </motion.button>
           </div>
+        </motion.div>
+
+        {/* Filter Grid (Kyr Glassy Design) */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[
+            { p: "Filter Department", v: filterDept, s: setFilterDept },
+            { p: "Filter Title", v: filterTitle, s: setFilterTitle },
+            { p: "Filter Hall", v: filterHall, s: setFilterHall }
+          ].map((f, idx) => (
+            <input 
+              key={idx} placeholder={f.p} value={f.v} onChange={(e) => f.s(e.target.value)}
+              className={`px-5 py-3 rounded-2xl border outline-none transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500" : "bg-white border-gray-200 focus:border-blue-500"}`}
+            />
+          ))}
+          <button 
+            onClick={() => { setFilterDept(""); setFilterTitle(""); setFilterHall(""); }}
+            className={`px-5 py-3 rounded-2xl text-xs font-bold uppercase tracking-widest ${isDtao ? "bg-white/5 text-slate-400 hover:text-white" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
+          >
+            Reset Filters
+          </button>
         </div>
 
-        {/* Filters row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input
-            placeholder="Filter by Department..."
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
-            className={`${isDtao ? "p-2 rounded-lg border border-violet-700 bg-transparent text-slate-200" : "p-2 rounded-lg border border-gray-200 text-slate-900"}`}
-          />
-          <input
-            placeholder="Filter by Title..."
-            value={filterTitle}
-            onChange={(e) => setFilterTitle(e.target.value)}
-            className={`${isDtao ? "p-2 rounded-lg border border-violet-700 bg-transparent text-slate-200" : "p-2 rounded-lg border border-gray-200 text-slate-900"}`}
-          />
-          <input
-            placeholder="Filter by Hall..."
-            value={filterHall}
-            onChange={(e) => setFilterHall(e.target.value)}
-            className={`${isDtao ? "p-2 rounded-lg border border-violet-700 bg-transparent text-slate-200" : "p-2 rounded-lg border border-gray-200 text-slate-900"}`}
-          />
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => {
-                setFilterDept("");
-                setFilterTitle("");
-                setFilterHall("");
-              }}
-              className={`${isDtao ? "px-4 py-2 rounded-lg bg-transparent border border-violet-700 text-slate-200" : "px-4 py-2 rounded-lg bg-white border border-gray-200 text-slate-900"}`}
-            >
-              Reset filters
-            </button>
-          </div>
-        </div>
-
-        {/* Card/Container */}
-        <div className={`${containerBg} rounded-xl shadow overflow-hidden`}>
+        {/* Unified Container */}
+        <motion.div 
+          layout
+          className={`rounded-[2.5rem] border overflow-hidden ${glassCard}`}
+        >
           {loading ? (
-            <div className="p-8 text-center text-gray-400">Loading…</div>
+            <div className="py-32 text-center opacity-40 animate-pulse font-medium">Aggregating records...</div>
           ) : error ? (
-            <div className="p-8 text-center text-rose-500">{error}</div>
+            <div className="py-32 text-center text-rose-500 font-bold px-4">{error}</div>
           ) : seminars.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No seminars or booking requests found.</div>
+            <div className="py-32 text-center opacity-40">No entries found.</div>
           ) : (
             <>
               {isDesktopView && (
-                // <-- attach onWheel and ref here to allow side-scrolling with the mouse wheel
-                <div
-                  className="w-full overflow-x-auto"
-                  onWheel={handleWheel}
-                  ref={tableScrollRef}
-                  // make sure it is focusable for keyboard users
+                <div 
+                  className="w-full overflow-x-auto custom-scrollbar" 
+                  onWheel={handleWheel} 
+                  ref={tableScrollRef} 
                   tabIndex={0}
                 >
-                  <table className={`min-w-full divide-y ${divider}`}>
-                    <thead className={tableHeadBg}>
-                      <tr>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Hall</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Date</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Start</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>End</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Title</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Booked By</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Department</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Email</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Phone</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Applied At</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Status</th>
-                        <th className={`px-4 py-3 text-left text-xs font-medium ${mutedText} uppercase tracking-wider`}>Source</th>
-                        <th className={`px-4 py-3 text-right text-xs font-medium ${mutedText} uppercase tracking-wider`}>Action</th>
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className={`border-b ${isDtao ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50/50"}`}>
+                        {["Hall", "Date", "Start", "End", "Title", "Requester", "Dept", "Email", "Phone", "Applied", "Status", "Source", "Action"].map((h, i) => (
+                          <th key={i} className="px-6 py-5 text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 whitespace-nowrap">{h}</th>
+                        ))}
                       </tr>
                     </thead>
-
-                    <tbody className={`${isDtao ? "bg-black/40" : "bg-white"} divide-y ${divider}`}>
-                      {filteredSeminars.map((s) => (
-                        <React.Fragment key={s.id}>
-                          <tr className={`${rowHover} transition`}>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.hallName || "—"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{(s.date || "").split("T")[0] || "—"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.startTime || "--"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.endTime || "--"}</td>
-
-                            <td className="px-4 py-3 text-sm">
-                              <div className="max-w-[220px] truncate">{s.slotTitle || "—"}</div>
-                            </td>
-
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.bookingName || "—"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.department || "—"}</td>
-
-                            <td className="px-4 py-3 text-sm">
-                              <div className="max-w-[200px] truncate">{s.email || "—"}</div>
-                            </td>
-
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{s.phone || "—"}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">{formatAppliedAt(s.appliedAt)}</td>
-
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span
-                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  s.status === STATUS_APPROVED
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : s.status === STATUS_PENDING
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-rose-100 text-rose-700"
-                                }`}
-                                aria-label={`Status ${s.status}`}
-                              >
-                                {s.status}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400">{s.source}</td>
-
-                            <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="inline-flex gap-2">
-                                {/* REPLACED: Edit -> Update Hall (opens modal) */}
-                                <button
-                                  onClick={() => openChangeHall(s)}
-                                  className={`px-2 py-1 rounded-md hover:shadow-sm transition transform hover:-translate-y-0.5 ${isDtao ? "bg-sky-600/10 text-sky-300" : "bg-sky-50 text-sky-700"}`}
-                                  title="Update Hall"
-                                  aria-label={`Update hall for ${s.slotTitle}`}
-                                >
-                                  Update Hall
-                                </button>
-
-                                <button
-                                  onClick={() => handleDelete(s)}
-                                  className={`px-2 py-1 rounded-md hover:shadow-sm transition transform hover:-translate-y-0.5 ${isDtao ? "bg-rose-600/10 text-rose-300" : "bg-rose-50 text-rose-700"}`}
-                                  title="Delete"
-                                  aria-label={`Delete ${s.slotTitle}`}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* inline confirmation small card row (shows after successful hall update) */}
-                          {confirmMap[s.id] && (
-                            <tr>
-                              <td colSpan={13} className="px-4 py-2">
-                                <div className={`${isDtao ? "bg-black/30 border border-violet-900 text-slate-100" : "bg-white/90 border border-gray-100"} p-3 rounded-md max-w-md`}>
-                                  <div className="text-sm font-medium">Hall changed</div>
-                                  <div className="text-sm mt-1">Updated to: <strong>{confirmMap[s.id].hall}</strong></div>
+                    <tbody className="divide-y divide-white/5">
+                      <AnimatePresence>
+                        {filteredSeminars.map((s) => (
+                          <React.Fragment key={s.id}>
+                            <motion.tr 
+                              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                              className={`group transition-colors ${isDtao ? "hover:bg-white/5" : "hover:bg-blue-50/50"}`}
+                            >
+                              <td className="px-6 py-5 whitespace-nowrap font-bold text-blue-500">{s.hallName || "—"}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-sm opacity-80">{(s.date || "").split("T")[0]}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-xs font-medium opacity-60">{s.startTime}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-xs font-medium opacity-60">{s.endTime}</td>
+                              <td className="px-6 py-5 max-w-xs truncate font-semibold">{s.slotTitle}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-sm">{s.bookingName}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-xs opacity-60 font-bold">{s.department}</td>
+                              <td className="px-6 py-5 max-w-[150px] truncate opacity-60 text-xs">{s.email}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-xs opacity-60">{s.phone}</td>
+                              <td className="px-6 py-5 whitespace-nowrap text-xs opacity-40 italic">{formatAppliedAt(s.appliedAt)}</td>
+                              <td className="px-6 py-5 whitespace-nowrap">
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                                  s.status === STATUS_APPROVED ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                                }`}>{s.status}</span>
+                              </td>
+                              <td className="px-6 py-5 whitespace-nowrap text-[10px] font-bold opacity-30 italic">{s.source}</td>
+                              <td className="px-6 py-5 text-right whitespace-nowrap">
+                                <div className="flex gap-2">
+                                  <button onClick={() => openChangeHall(s)} className="px-4 py-2 rounded-xl bg-sky-500/10 text-sky-500 text-xs font-bold hover:bg-sky-500 hover:text-white transition-all">Update Hall</button>
+                                  <button onClick={() => handleDelete(s)} className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  </button>
                                 </div>
                               </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
+                            </motion.tr>
+                            {confirmMap[s.id] && (
+                              <motion.tr initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }}>
+                                <td colSpan={13} className="px-6 py-3">
+                                  <div className={`px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${isDtao ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
+                                    <div className="w-2 h-2 rounded-full bg-current animate-ping" />
+                                    Successfully relocated to: {confirmMap[s.id].hall}
+                                  </div>
+                                </td>
+                              </motion.tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </AnimatePresence>
                     </tbody>
                   </table>
                 </div>
               )}
 
+              {/* Mobile Card Layout (Kyr Style) */}
               {!isDesktopView && (
-                <div className={`divide-y ${divider} md:hidden`}>
-                  {filteredSeminars.map((s) => (
-                    <div key={`card-${s.id}`} className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className={`text-sm font-semibold truncate ${isDtao ? "text-slate-100" : "text-gray-800"}`}>{s.slotTitle || "—"}</div>
-                          <div className={`${isDtao ? "text-slate-300" : "text-xs text-gray-500"}`}>{s.hallName || "—"} • {(s.date || "").split("T")[0] || "—"}</div>
-                          <div className={`${isDtao ? "text-slate-300" : "text-xs text-gray-500"} mt-1`}>{s.bookingName || "—"} {s.department ? `• ${s.department}` : ""}</div>
-                          <div className={`${isDtao ? "text-slate-400" : "text-xs text-gray-400"} mt-1`}>{formatAppliedAt(s.appliedAt)}</div>
-                        </div>
-
-                        <div className="flex-shrink-0 flex flex-col items-end gap-2">
-                          <div className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            s.status === STATUS_APPROVED ? "bg-emerald-100 text-emerald-700" : s.status === STATUS_PENDING ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
-                          }`}>{s.status}</div>
-
-                          <div className="flex gap-2">
-                            {/* REPLACED: Edit -> Update Hall */}
-                            <button
-                              onClick={() => openChangeHall(s)}
-                              className={`px-3 py-1 rounded-md text-xs ${isDtao ? "bg-sky-600/10 text-sky-300" : "bg-sky-50 text-sky-700"}`}
-                            >
-                              Update Hall
-                            </button>
-                            <button
-                              onClick={() => handleDelete(s)}
-                              className={`px-3 py-1 rounded-md text-xs ${isDtao ? "bg-rose-600/10 text-rose-300" : "bg-rose-50 text-rose-700"}`}
-                            >
-                              Delete
-                            </button>
+                <div className="divide-y divide-white/10">
+                  <AnimatePresence>
+                    {filteredSeminars.map((s) => (
+                      <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-5 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-lg truncate">{s.slotTitle || "Untitled Seminar"}</h3>
+                            <p className="text-xs text-blue-500 font-bold uppercase tracking-wider">{s.hallName} • {(s.date || "").split("T")[0]}</p>
                           </div>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                            s.status === STATUS_APPROVED ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                          }`}>{s.status}</span>
                         </div>
-                      </div>
-
-                      {/* small inline confirmation card for mobile */}
-                      {confirmMap[s.id] && (
-                        <div className="mt-3">
-                          <div className={`${isDtao ? "bg-black/30 border border-violet-900 text-slate-100" : "bg-white/90 border border-gray-100"} p-3 rounded-md max-w-md`}>
-                            <div className="text-sm font-medium">Hall changed</div>
-                            <div className="text-sm mt-1">Updated to: <strong>{confirmMap[s.id].hall}</strong></div>
-                          </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs opacity-60">
+                           <div><strong>Dept:</strong> {s.department}</div>
+                           <div><strong>Requester:</strong> {s.bookingName}</div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <div className="flex gap-2 pt-2">
+                           <button onClick={() => openChangeHall(s)} className="flex-1 py-3 bg-sky-500/10 text-sky-500 rounded-xl text-xs font-bold">Relocate</button>
+                           <button onClick={() => handleDelete(s)} className="flex-1 py-3 bg-red-500/10 text-red-500 rounded-xl text-xs font-bold">Remove</button>
+                        </div>
+                        {confirmMap[s.id] && (
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`p-3 rounded-xl text-[10px] font-bold ${isDtao ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
+                             Update Success: {confirmMap[s.id].hall}
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
             </>
           )}
-        </div>
-
-        <div className={`${isDtao ? "text-slate-300" : "text-sm text-gray-500"} mt-2`}>Tip: Requests are shown with source=`request`. Seminars override requests for same slot.</div>
+        </motion.div>
+        
+        <p className="text-[10px] opacity-30 uppercase tracking-widest text-center mt-6 italic">Note: Seminar data overrides duplicate requests for the same hall/time slot.</p>
       </div>
 
-      {/* Change Hall Modal */}
-      {changeHallOpen && changeTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!updatingHall) closeChangeHall(); }} />
-          <div className={`${isDtao ? "relative z-10 w-full max-w-lg bg-black/80 border border-violet-900 text-slate-100 p-6 rounded-2xl" : "relative z-10 w-full max-w-lg bg-white p-6 rounded-2xl shadow-lg"}`}>
-            <h3 className={`${isDtao ? "text-lg font-bold mb-2 text-slate-100" : "text-lg font-bold mb-2 text-gray-900"}`}>Change Hall for Seminar</h3>
-            <div className="text-sm mb-3">
-              <div><strong>Seminar:</strong> {changeTarget.slotTitle || "—"}</div>
-              <div className="mt-1"><strong>Current hall:</strong> {changeTarget.hallName || "—"}</div>
-              <div className="mt-1"><strong>Date:</strong> {(changeTarget.date || "").split("T")[0] || "—"}</div>
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm font-medium">Choose a hall</div>
-
-              <div className={`${isDtao ? "bg-black/30 border border-violet-900 p-3 rounded-md" : "bg-gray-50 border border-gray-100 p-3 rounded-md"}`}>
-                {hallsLoading ? (
-                  <div className="text-sm text-slate-300">Loading halls…</div>
-                ) : hallsList.length === 0 ? (
-                  <div className="text-sm text-gray-500">No halls available</div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {hallsList.map((h) => (
-                      <button
-                        key={h}
-                        onClick={() => confirmChangeHall(changeTarget.id, h)}
-                        disabled={updatingHall}
-                        className={`text-left w-full px-3 py-2 rounded-md transition ${isDtao ? "bg-transparent border border-violet-700 hover:bg-violet-900/40 text-slate-100" : "bg-white border border-gray-200 hover:shadow-sm text-slate-900"}`}
-                      >
-                        {h}
-                        {h === (changeTarget.hallName || "") && <span className="ml-2 text-xs text-gray-400"> (current)</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
+      {/* Change Hall Modal (Premium Kyr Style) */}
+      <AnimatePresence>
+        {changeHallOpen && changeTarget && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !updatingHall && closeChangeHall()} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className={`relative w-full max-w-lg p-8 rounded-[3rem] border ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white border-white"}`}>
+              <h3 className="text-xl font-bold mb-1">Update <span className="text-blue-500">Hall Selection</span></h3>
+              <p className="text-[10px] uppercase font-bold opacity-40 mb-6 tracking-widest">{changeTarget.slotTitle}</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                {hallsLoading ? <div className="col-span-2 text-center py-10 opacity-40">Scanning Venues...</div> : 
+                  hallsList.map((h) => (
+                    <motion.button 
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      key={h} onClick={() => confirmChangeHall(changeTarget.id, h)} disabled={updatingHall}
+                      className={`text-left p-4 rounded-2xl border text-sm font-semibold transition-all ${
+                        h === changeTarget.hallName ? "border-blue-500 bg-blue-500/10 text-blue-500" : "border-white/5 bg-white/5 hover:border-white/20"
+                      }`}
+                    >
+                      {h}
+                      {h === changeTarget.hallName && <span className="block text-[8px] opacity-50 uppercase mt-1">Currently Selected</span>}
+                    </motion.button>
+                  ))
+                }
               </div>
-            </div>
 
-            <div className="mt-4 flex justify-end gap-3">
-              <button
-                className={`${isDtao ? "px-4 py-2 rounded-md bg-transparent border border-violet-700 text-slate-200" : "px-4 py-2 rounded-md bg-white border border-gray-200 text-slate-900"}`}
-                onClick={() => { if (!updatingHall) closeChangeHall(); }}
-                disabled={updatingHall}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded-md bg-sky-600 text-white hover:bg-sky-700"
-                onClick={async () => {
-                  // fallback: if hallsList has at least one and user hasn't chosen by clicking a button, pick first as default update
-                  if (!changeTarget) return;
-                  if (hallsList.length === 0) {
-                    notify("No halls available to pick", "warn", 2200);
-                    return;
-                  }
-                  if (!updatingHall) {
-                    await confirmChangeHall(changeTarget.id, hallsList[0]);
-                  }
-                }}
-                disabled={updatingHall || hallsList.length === 0}
-              >
-                {updatingHall ? "Updating…" : "Update to first hall"}
-              </button>
-            </div>
+              <div className="mt-8 flex gap-3">
+                <button onClick={closeChangeHall} disabled={updatingHall} className="flex-1 py-4 rounded-2xl font-bold bg-slate-500/10 text-slate-500 text-sm">Cancel</button>
+                <button 
+                  onClick={() => confirmChangeHall(changeTarget.id, hallsList[0])} 
+                  disabled={updatingHall || !hallsList.length}
+                  className="flex-1 py-4 rounded-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-500/20 text-sm"
+                >
+                  {updatingHall ? "Updating..." : "Auto-Assign"}
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
