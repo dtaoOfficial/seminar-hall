@@ -1,6 +1,6 @@
 // src/pages/Admin/ManageDepartmentsPage.jsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion"; // Added for smooth UI
+import { motion, AnimatePresence } from "framer-motion"; 
 import api from "../../utils/api";
 import { useNotification } from "../../components/NotificationsProvider";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -26,7 +26,6 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
   const [showTable, setShowTable] = useState(true);
   const [showCards, setShowCards] = useState(false);
 
-  // refs for smooth scrolling / focus
   const mainRef = useRef(null);
   const modalInputRef = useRef(null);
 
@@ -98,9 +97,11 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
     }
   };
 
+  // ✅ FIXED EDIT PANEL BUG: Added Scroll to Top
   const handleEditOpen = (dept) => {
     setEditing(dept);
     setEditName(dept.name || "");
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Brings user to view the modal
     setTimeout(() => {
       if (modalInputRef.current) {
         modalInputRef.current.focus({ preventScroll: true });
@@ -150,14 +151,13 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
     }
   };
 
-  // --- UI Styles ---
   const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl shadow-2xl" : "bg-white/80 border-white/40 backdrop-blur-md shadow-xl";
 
   return (
-    <div ref={mainRef} className={`min-h-screen pt-24 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
+    // FIX: Adjusted padding for tight navbar fit
+    <div ref={mainRef} className={`min-h-screen pt-4 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8">
         
-        {/* Header Section */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           <h1 className={`text-3xl font-bold tracking-tight ${isDtao ? "text-white" : "text-slate-800"}`}>
             Manage <span className="text-blue-500">Departments</span>
@@ -165,13 +165,11 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
           <p className="text-sm opacity-60 mt-1">Configure and organize department credentials (MCA, MBA, etc.)</p>
         </motion.div>
 
-        {/* Form & List Card */}
         <motion.div 
           initial={{ y: 20, opacity: 0 }} 
           animate={{ y: 0, opacity: 1 }}
           className={`rounded-[2rem] border overflow-hidden p-6 md:p-8 ${glassCard}`}
         >
-          {/* Add form */}
           <form onSubmit={handleAdd} className="flex flex-col md:flex-row items-center gap-4 mb-8">
             <input
               type="text"
@@ -180,7 +178,7 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
               onChange={(e) => setNewName(e.target.value)}
               disabled={adding}
               className={`w-full md:flex-1 px-5 py-3 rounded-2xl outline-none border transition-all text-sm ${
-                isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500 shadow-inner"
+                isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500 shadow-inner text-slate-900"
               }`}
             />
             <motion.button
@@ -196,7 +194,6 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
 
           <div className={`border-t mb-8 ${isDtao ? "border-white/5" : "border-gray-100"}`} />
 
-          {/* List Logic */}
           {loading ? (
             <div className="py-20 text-center opacity-40 animate-pulse font-medium">Synchronizing with server...</div>
           ) : departments.length === 0 ? (
@@ -258,10 +255,10 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
           )}
         </motion.div>
 
-        {/* Edit Modal */}
+        {/* Edit Modal (Fixed centered) */}
         <AnimatePresence>
           {editing && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => { if (!savingEdit) handleEditCancel(); }}
@@ -271,7 +268,7 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className={`relative w-full max-w-md p-8 rounded-[2rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white border-white"}`}
+                className={`relative w-full max-w-md p-8 rounded-[2rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10 text-white" : "bg-white border-white text-slate-900"}`}
               >
                 <h3 className="text-xl font-bold mb-6">Modify <span className="text-blue-500">Department</span></h3>
                 <form onSubmit={handleEditSave} className="space-y-6">
@@ -282,7 +279,7 @@ const ManageDepartmentsPage = ({ fetchDepartmentsProp }) => {
                     onChange={(e) => setEditName(e.target.value)}
                     disabled={savingEdit}
                     className={`w-full px-5 py-3 rounded-2xl border outline-none transition-all ${
-                      isDtao ? "bg-white/5 border-white/10 focus:border-blue-500" : "bg-slate-50 border-slate-100 focus:border-blue-500 shadow-inner"
+                      isDtao ? "bg-white/5 border-white/10 focus:border-blue-500" : "bg-slate-50 border-slate-100 focus:border-blue-500 shadow-inner text-slate-900"
                     }`}
                   />
                   <div className="flex gap-3">

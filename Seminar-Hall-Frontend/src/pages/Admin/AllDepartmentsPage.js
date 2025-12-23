@@ -1,6 +1,6 @@
 // src/pages/AllDepartmentsPage.js
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion"; // Added for Kyr smoothness
+import { motion, AnimatePresence } from "framer-motion"; 
 import api from "../../utils/api";
 import { useNavigate } from "react-router-dom";
 import { useNotification } from "../../components/NotificationsProvider";
@@ -52,7 +52,7 @@ function Dropdown({ options = [], value, onChange, placeholder = "Select" }) {
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
             className={`absolute z-[100] mt-2 w-full rounded-xl shadow-2xl backdrop-blur-xl border ${
-              isDtao ? "bg-black/90 border-violet-500/40 text-slate-100" : "bg-white border-gray-200"
+              isDtao ? "bg-black/90 border-violet-500/40 text-slate-100" : "bg-white border-gray-200 text-slate-900"
             } overflow-hidden`}
           >
             <div className="max-h-60 overflow-y-auto p-1">
@@ -98,7 +98,6 @@ const AllDepartmentsPage = () => {
   const [newPassword, setNewPassword] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
-  // --- Functions Kept Exactly Same ---
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
@@ -135,9 +134,11 @@ const AllDepartmentsPage = () => {
     return matchDept && matchEmail;
   });
 
+  // ✅ FIXED START EDIT: Added window.scrollTo to bring form into view
   const startEdit = (u) => {
     setEditingUser(u);
     setForm({ name: u.name || "", email: u.email || "", role: (u.role || "DEPARTMENT").toUpperCase(), department: u.department || departments[0] || "", phone: u.phone || "", password: "" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => { setEditingUser(null); };
@@ -170,6 +171,7 @@ const AllDepartmentsPage = () => {
     setResetUser(u);
     setNewPassword("");
     setResetModalOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const resetPassword = async () => {
@@ -191,7 +193,6 @@ const AllDepartmentsPage = () => {
   const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl shadow-2xl" : "bg-white/80 border-white/40 backdrop-blur-md shadow-xl shadow-blue-500/5";
 
   return (
-    // FIX: Changed pt-8 to pt-4 to remove extra top space
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`min-h-screen pt-4 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
@@ -202,15 +203,14 @@ const AllDepartmentsPage = () => {
             <p className="text-sm opacity-60 mt-1">Manage administrative and departmental access accounts</p>
           </div>
           
-          {/* Filters (Glass style) */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <input 
               type="text" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} placeholder="Search email..." 
-              className={`w-full sm:w-64 px-4 py-2.5 rounded-xl border outline-none transition-all ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500" : "bg-white border-gray-200 focus:border-blue-500"}`} 
+              className={`w-full sm:w-64 px-4 py-2.5 rounded-xl border outline-none transition-all ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-200 focus:border-blue-500 text-slate-900"}`} 
             />
             <input 
               type="text" value={searchDept} onChange={(e) => setSearchDept(e.target.value)} placeholder="Dept filter..." 
-              className={`w-full sm:w-48 px-4 py-2.5 rounded-xl border outline-none transition-all ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500" : "bg-white border-gray-200 focus:border-blue-500"}`} 
+              className={`w-full sm:w-48 px-4 py-2.5 rounded-xl border outline-none transition-all ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-200 focus:border-blue-500 text-slate-900"}`} 
             />
             <motion.button whileHover={{ scale: 1.05 }} onClick={fetchUsers} className={`px-5 py-2.5 rounded-xl font-bold text-sm text-white ${isDtao ? "bg-violet-600" : "bg-blue-600"}`}>
                {loading ? "..." : "Refresh"}
@@ -218,7 +218,7 @@ const AllDepartmentsPage = () => {
           </div>
         </motion.div>
 
-        {/* User Table (Desktop) */}
+        {/* User Table */}
         <motion.div layout className={`rounded-[2.5rem] border overflow-hidden ${glassCard}`}>
           <div className="hidden md:block w-full overflow-x-auto">
             <table className="w-full text-left">
@@ -252,7 +252,6 @@ const AllDepartmentsPage = () => {
             </table>
           </div>
 
-          {/* Mobile Grid */}
           <div className="md:hidden divide-y divide-white/10">
             {filteredUsers.map((u) => (
               <div key={u.id || u._id} className="p-5 space-y-4">
@@ -273,20 +272,20 @@ const AllDepartmentsPage = () => {
           </div>
         </motion.div>
 
-        {/* Modals Logic Kept Identical, UI Updated */}
+        {/* ✅ MODAL LOGIC FIXED: Using fixed positioning and smooth centering */}
         <AnimatePresence>
           {editingUser && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={cancelEdit} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }} className={`relative w-full max-w-2xl p-8 rounded-[3rem] border ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white"}`}>
+              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }} className={`relative w-full max-w-2xl p-8 rounded-[3rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10 text-white" : "bg-white border-white text-slate-900"}`}>
                 <h3 className="text-xl font-bold mb-6">Modify <span className="text-blue-500">User Access</span></h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Full Name</label><input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Email</label><input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Full Name</label><input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100 text-slate-900"}`} /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Email</label><input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100 text-slate-900"}`} /></div>
                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Account Role</label><Dropdown options={["ADMIN", "DEPARTMENT"]} value={form.role} onChange={(v) => setForm({...form, role: v})} /></div>
                   {form.role === "DEPARTMENT" && <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Dept Branch</label><Dropdown options={departments} value={form.department} onChange={(v) => setForm({...form, department: v})} /></div>}
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Phone</label><input value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Set Password</label><input type="password" placeholder="Leave empty to keep current" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10 text-violet-300" : "bg-slate-50 border-slate-100"}`} /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Phone</label><input value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100 text-slate-900"}`} /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase opacity-40 ml-1">Set Password</label><input type="password" placeholder="Leave empty to keep current" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} className={`w-full px-4 py-3 rounded-2xl border outline-none ${isDtao ? "bg-white/5 border-white/10 text-violet-300" : "bg-slate-50 border-slate-100 text-slate-900"}`} /></div>
                 </div>
                 <div className="mt-8 flex gap-3"><button onClick={cancelEdit} className="flex-1 py-4 rounded-2xl font-bold bg-slate-500/10 text-slate-500">Cancel</button><button onClick={saveEdit} className="flex-1 py-4 rounded-2xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-600/20">Save Profile</button></div>
               </motion.div>
@@ -294,14 +293,15 @@ const AllDepartmentsPage = () => {
           )}
         </AnimatePresence>
 
+        {/* ✅ RESET MODAL FIXED: Also centered professionally */}
         <AnimatePresence>
           {resetModalOpen && (
-            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setResetModalOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
-              <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className={`relative w-full max-w-md p-8 rounded-[2.5rem] border ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white"}`}>
+              <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className={`relative w-full max-w-md p-8 rounded-[2.5rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10 text-white" : "bg-white border-white text-slate-900"}`}>
                 <h3 className="text-xl font-bold mb-2">Reset <span className="text-indigo-500">Security</span></h3>
                 <p className="text-xs opacity-50 mb-6 font-medium">Updating credentials for {resetUser?.email}</p>
-                <input type="password" placeholder="New Password (min 6 chars)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full px-5 py-4 rounded-2xl border outline-none mb-6 ${isDtao ? "bg-white/5 border-white/10 text-violet-300" : "bg-slate-50 border-slate-100"}`} />
+                <input type="password" placeholder="New Password (min 6 chars)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full px-5 py-4 rounded-2xl border outline-none mb-6 ${isDtao ? "bg-white/5 border-white/10 text-violet-300" : "bg-slate-50 border-slate-100 text-slate-900"}`} />
                 <div className="flex gap-3"><button onClick={() => setResetModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold bg-slate-500/10 text-slate-500">Close</button><button onClick={resetPassword} disabled={resetSubmitting} className="flex-1 py-3 rounded-xl font-bold bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">{resetSubmitting ? "Updating..." : "Confirm"}</button></div>
               </motion.div>
             </div>
