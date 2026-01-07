@@ -19,6 +19,8 @@ import ManageOperatorsPage from "../pages/ManageOperators";
 import SeminarDetails from "../pages/Admin/SeminarDetails";
 import ExportPage from "../pages/Admin/ExportPage";
 import AdminCalendarPage from "../pages/Admin/AdminCalendarPage";
+import SystemLogsPage from "../pages/Admin/SystemLogsPage";
+import ExportCalendarPage from "../pages/Admin/ExportCalendarPage";
 
 /* ---------- Helpers ---------- */
 const localISODate = (d = new Date()) => {
@@ -108,7 +110,10 @@ const AdminDashboard = ({ user }) => {
     setHallDayLoading(true);
     try {
       const res = await api.get(`/seminars/day/${encodeURIComponent(selectedDate)}?hallName=${encodeURIComponent(selectedHall)}`);
-      setHallDayBookings(Array.isArray(res?.data) ? res.data : []);
+      // Update 1: FILTER ONLY APPROVED BOOKINGS
+      const raw = Array.isArray(res?.data) ? res.data : [];
+      const approvedOnly = raw.filter(b => (b.status || "APPROVED").toUpperCase() === "APPROVED");
+      setHallDayBookings(approvedOnly);
     } catch { setHallDayBookings([]); }
     finally { setHallDayLoading(false); }
   }, [selectedHall, selectedDate]);
@@ -144,10 +149,11 @@ const AdminDashboard = ({ user }) => {
   const stats = useMemo(() => ({
     users: users.length,
     requests: seminars.filter(s => ["PENDING", "CANCEL_REQUESTED"].includes(s.status?.toUpperCase())).length,
-    seminars: seminars.length,
-    halls: halls.length,
+    // Update 2: Renamed keys for display mapping below
+    "TOTAL VENUES": halls.length, 
     departments: departments.length,
-    approved: seminars.filter(s => s.status === "APPROVED").length,
+    "APPROVED BOOKINGS": seminars.filter(s => s.status === "APPROVED").length,
+    "ALL RECORDS": seminars.length
   }), [users, seminars, halls, departments]);
 
   if (!user) return null;
@@ -167,6 +173,8 @@ const AdminDashboard = ({ user }) => {
           <Route path="halls" element={<ManageHallsPage fetchHalls={fetchHalls} halls={halls} />} />
           <Route path="export" element={<ExportPage />} />
           <Route path="calendar" element={<AdminCalendarPage />} />
+          <Route path="logs" element={<SystemLogsPage />} />
+          <Route path="export-calendar" element={<ExportCalendarPage />} />
 
           <Route
             path="*"
@@ -203,7 +211,7 @@ const AdminDashboard = ({ user }) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Availability Section */}
                   <div className={`rounded-[2.5rem] p-8 border shadow-xl ${isDtao ? "bg-black/50 border-violet-900" : "bg-white border-gray-100"}`}>
-                    <h3 className={`text-xl font-black mb-6 ${isDtao ? "text-white" : "text-black"}`}>Hall Availability</h3>
+                    <h3 className={`text-xl font-black mb-6 ${isDtao ? "text-white" : "text-black"}`}>Venue Availability</h3>
                     <div className="flex flex-col sm:flex-row gap-3 mb-6">
                       <select 
                         style={isDtao ? {backgroundColor: "#1a1a2e", color: "white"} : {color: "black"}}
@@ -213,7 +221,6 @@ const AdminDashboard = ({ user }) => {
                         {halls.map((h, i) => <option key={i} value={h.hallName || h.name}>{h.hallName || h.name}</option>)}
                       </select>
                       
-                      {/* ✅ CALENDAR THEME FIX APPLIED HERE */}
                       <input 
                         type="date" 
                         style={isDtao ? { backgroundColor: "#1a1a2e", color: "white", colorScheme: "dark" } : { color: "black" }}
@@ -235,15 +242,23 @@ const AdminDashboard = ({ user }) => {
                               </li>
                             ))}
                           </ul>
-                        ) : <div className={`text-center py-10 text-sm font-bold opacity-40 ${isDtao ? "text-white" : "text-black"}`}>No bookings for this date.</div>}
+                        ) : <div className={`text-center py-10 text-sm font-bold opacity-40 ${isDtao ? "text-white" : "text-black"}`}>No approved bookings for this date.</div>}
                     </div>
-                    <button onClick={() => navigate("calendar")} className="mt-6 w-full py-4 rounded-2xl font-black uppercase tracking-widest bg-blue-600 text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95 text-xs">Open Full Calendar</button>
+                    {/* ✅ UPDATED BUTTON GRID */}
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button onClick={() => navigate("calendar")} className="py-4 rounded-2xl font-black uppercase tracking-widest bg-blue-600 text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95 text-xs">
+                        Full Calendar
+                      </button>
+                      <button onClick={() => navigate("export-calendar")} className={`py-4 rounded-2xl font-black uppercase tracking-widest border transition-transform active:scale-95 text-xs ${isDtao ? "bg-white/10 text-white border-white/10 hover:bg-white/20" : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"}`}>
+                        Print Register
+                      </button>
+                    </div>
                   </div>
 
                   {/* Activity Section */}
                   <aside className={`rounded-[2.5rem] p-8 border shadow-xl ${isDtao ? "bg-black/50 border-violet-900" : "bg-white border-gray-100"}`}>
                     <div className="flex justify-between items-center mb-6">
-                      <h3 className={`text-xl font-black ${isDtao ? "text-white" : "text-black"}`}>Recent Seminars</h3>
+                      <h3 className={`text-xl font-black ${isDtao ? "text-white" : "text-black"}`}>Recent Bookings</h3>
                       <CSVLink data={recentSeminars} filename="history.csv" className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:underline">Export CSV</CSVLink>
                     </div>
                     <div className="space-y-3">

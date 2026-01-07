@@ -81,11 +81,15 @@ const RequestsPage = () => {
   const [items, setItems] = useState([]);
   const [searchDeptRaw, setSearchDeptRaw] = useState("");
   const [searchDateRaw, setSearchDateRaw] = useState("");
-  const [statusFilterRaw, setStatusFilterRaw] = useState("ALL");
-
+  
+  // UPDATED: Default to "PENDING" instead of "ALL"
+  const [statusFilterRaw, setStatusFilterRaw] = useState("PENDING");
+  
   const [searchDept, setSearchDept] = useState("");
   const [searchDate, setSearchDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  
+  // UPDATED: Default to "PENDING"
+  const [statusFilter, setStatusFilter] = useState("PENDING");
 
   const [remarksMap, setRemarksMap] = useState({});
   const [blinkIds, setBlinkIds] = useState(new Set());
@@ -305,7 +309,8 @@ const RequestsPage = () => {
               <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2 block">Status</label>
               <Dropdown options={[{value: "ALL", label: "All Status"}, "PENDING", "APPROVED", "REJECTED", "CANCEL_REQUESTED", "CANCELLED"]} value={statusFilterRaw} onChange={setStatusFilterRaw} />
             </div>
-            <button onClick={() => {setSearchDeptRaw(""); setSearchDateRaw(""); setStatusFilterRaw("ALL");}} className={`px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest ${isDtao ? "bg-white/5 text-slate-400" : "bg-slate-200 text-slate-600"}`}>Reset</button>
+            {/* UPDATED: Reset now resets to "PENDING" to maintain clean view */}
+            <button onClick={() => {setSearchDeptRaw(""); setSearchDateRaw(""); setStatusFilterRaw("PENDING");}} className={`px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest ${isDtao ? "bg-white/5 text-slate-400" : "bg-slate-200 text-slate-600"}`}>Reset</button>
           </div>
         </motion.div>
 

@@ -3,8 +3,10 @@ package com.dtao.seminarbooking.controller;
 import com.dtao.seminarbooking.model.User;
 import com.dtao.seminarbooking.payload.LoginRequest;
 import com.dtao.seminarbooking.service.EmailService;
+import com.dtao.seminarbooking.service.LogService; // ✅ IMPORTED
 import com.dtao.seminarbooking.service.UserService;
 import com.dtao.seminarbooking.security.JwtTokenProvider;
+import jakarta.servlet.http.HttpServletRequest; // ✅ IMPORTED
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -32,11 +34,25 @@ public class UserController {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private LogService logService; // ✅ INJECTED LOG SERVICE
+
     @PostMapping
-    public ResponseEntity<?> createUser(@RequestBody User user) {
+    public ResponseEntity<?> createUser(@RequestBody User user, HttpServletRequest request) { // ✅ Added Request
         try {
             if (user.getCreatedBy() == null) user.setCreatedBy("system");
             User saved = userService.addUser(user);
+
+            // ✅ LOGGING: User Created
+            // Assuming the creator is an Admin. If you have the current user's email from JWT, you can put that instead of "ADMIN".
+            logService.logAction(
+                    request,
+                    "CREATE_USER",
+                    "ADMIN",
+                    "ADMIN",
+                    saved.getEmail(),
+                    "Created new user: " + saved.getName() + " (" + saved.getDepartment() + ")"
+            );
 
             try {
                 emailService.sendWelcomeEmail(saved);
@@ -55,7 +71,7 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest, HttpServletRequest request) { // ✅ Added Request
         try {
             if (loginRequest == null || loginRequest.getEmail() == null || loginRequest.getPassword() == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Email and password required"));
@@ -67,6 +83,8 @@ public class UserController {
                         new UsernamePasswordAuthenticationToken(loginRequest.getEmail().trim().toLowerCase(), loginRequest.getPassword());
                 authentication = authenticationManager.authenticate(authToken);
             } catch (AuthenticationException ae) {
+                // Optional: Log failed login attempts for security
+                logService.logAction(request, "LOGIN_FAILED", loginRequest.getEmail(), "UNKNOWN", "N/A", "Invalid credentials");
                 return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
             }
 
@@ -80,11 +98,22 @@ public class UserController {
             }
             User user = maybeUser.get();
 
+            String normalizedRole = user.getRole() == null ? "DEPARTMENT" : user.getRole();
+
+            // ✅ LOGGING: Login Success
+            logService.logAction(
+                    request,
+                    "LOGIN",
+                    user.getEmail(),
+                    normalizedRole,
+                    user.getId(),
+                    "User logged in successfully"
+            );
+
             Map<String, Object> resp = new HashMap<>();
             resp.put("token", jwt);
             resp.put("expiresIn", expiresIn);
             resp.put("user", toResponse(user));
-            String normalizedRole = user.getRole() == null ? "DEPARTMENT" : user.getRole();
             resp.put("role", normalizedRole);
 
             if ("ADMIN".equalsIgnoreCase(normalizedRole)) {
@@ -126,8 +155,13 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteUser(@PathVariable String id) {
+    public ResponseEntity<?> deleteUser(@PathVariable String id, HttpServletRequest request) { // ✅ Added Request
         Optional<User> maybe = userService.getUserById(id);
+
+        // Capture user details before deleting for the log
+        String deletedEmail = maybe.map(User::getEmail).orElse("Unknown");
+        String deletedName = maybe.map(User::getName).orElse("Unknown");
+
         maybe.ifPresent(user -> {
             try {
                 emailService.sendAccountRemovedEmail(user);
@@ -138,14 +172,36 @@ public class UserController {
         });
 
         userService.deleteUser(id);
+
+        // ✅ LOGGING: User Deleted
+        logService.logAction(
+                request,
+                "DELETE_USER",
+                "ADMIN",
+                "ADMIN",
+                id,
+                "Deleted user: " + deletedName + " (" + deletedEmail + ")"
+        );
+
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateUser(@PathVariable String id, @RequestBody User user) {
+    public ResponseEntity<?> updateUser(@PathVariable String id, @RequestBody User user, HttpServletRequest request) { // ✅ Added Request
         try {
             return userService.updateUser(id, user)
-                    .map(u -> ResponseEntity.ok(toResponse(u)))
+                    .map(u -> {
+                        // ✅ LOGGING: User Updated
+                        logService.logAction(
+                                request,
+                                "UPDATE_USER",
+                                "ADMIN",
+                                "ADMIN",
+                                id,
+                                "Updated profile for: " + u.getEmail()
+                        );
+                        return ResponseEntity.ok(toResponse(u));
+                    })
                     .orElse(ResponseEntity.notFound().build());
         } catch (Exception e) {
             e.printStackTrace();

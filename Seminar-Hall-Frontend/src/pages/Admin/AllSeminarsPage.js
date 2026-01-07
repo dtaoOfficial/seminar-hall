@@ -1,6 +1,6 @@
 // src/pages/Admin/AllSeminarsPage.jsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion"; // Added for Kyr smoothness
+import { motion, AnimatePresence } from "framer-motion";
 import api from "../../utils/api";
 import { useNotification } from "../../components/NotificationsProvider";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -9,6 +9,7 @@ import { useTheme } from "../../contexts/ThemeContext";
  * AllSeminarsPage — Enhanced UI Version
  * Logic: Full preservation of deduping, normalization, and wheel-scroll.
  * UI: Glass theme, smooth transitions, premium status pills.
+ * Updates: Removed Delete, Removed Source Column, Renamed Hall -> Venue (UI Only).
  */
 
 const STATUS_APPROVED = "APPROVED";
@@ -32,9 +33,10 @@ const AllSeminarsPage = () => {
   // filters
   const [filterDept, setFilterDept] = useState("");
   const [filterTitle, setFilterTitle] = useState("");
+  // Internal variable stays 'filterHall' to keep logic safe, but UI will show "Venue"
   const [filterHall, setFilterHall] = useState("");
 
-  // Change-hall modal
+  // Change-venue modal (Internal var: changeHallOpen)
   const [changeHallOpen, setChangeHallOpen] = useState(false);
   const [changeTarget, setChangeTarget] = useState(null); 
   const [hallsList, setHallsList] = useState([]);
@@ -162,25 +164,6 @@ const AllSeminarsPage = () => {
     } catch { return isoOrStr; }
   };
 
-  // --- Logic Block: Delete (Kept Intact) ---
-  const handleDelete = async (item) => {
-    const ok = window.confirm(`Delete this ${item.source === "request" ? "booking request" : "seminar"}?`);
-    if (!ok) return;
-
-    try {
-      if (item.source === "request") {
-        await api.delete(`/requests/${item.id}`);
-      } else {
-        await api.delete(`/seminars/${item.id}`);
-      }
-      setSeminars((prev) => prev.filter((s) => s.id !== item.id));
-      notify("Deleted successfully", "success", 2200);
-    } catch (err) {
-      const serverMsg = (err.response && (err.response.data?.message || err.response.data)) || err.message || "Failed to delete";
-      notify(String(serverMsg), "error", 4000);
-    }
-  };
-
   // --- Filters ---
   const filteredSeminars = seminars.filter((s) => {
     if (filterDept && !(s.department || "").toLowerCase().includes(filterDept.toLowerCase())) return false;
@@ -189,7 +172,7 @@ const AllSeminarsPage = () => {
     return true;
   });
 
-  // --- Logic Block: Hall Loading ---
+  // --- Logic Block: Hall/Venue Loading ---
   const loadHalls = async () => {
     setHallsLoading(true);
     try {
@@ -206,7 +189,7 @@ const AllSeminarsPage = () => {
         setHallsList(uniques);
       }
     } catch (err) {
-      console.error("Error loading halls:", err);
+      console.error("Error loading venues:", err);
       setHallsList([]);
     } finally {
       setHallsLoading(false);
@@ -245,10 +228,10 @@ const AllSeminarsPage = () => {
         });
       }, 5200);
 
-      notify("Hall updated", "success", 2200);
+      notify("Venue updated", "success", 2200);
       closeChangeHall();
     } catch (err) {
-      notify(err?.response?.data?.message || "Failed to update hall", "error", 3500);
+      notify(err?.response?.data?.message || "Failed to update venue", "error", 3500);
     } finally {
       setUpdatingHall(false);
     }
@@ -298,7 +281,7 @@ const AllSeminarsPage = () => {
           {[
             { p: "Filter Department", v: filterDept, s: setFilterDept },
             { p: "Filter Title", v: filterTitle, s: setFilterTitle },
-            { p: "Filter Hall", v: filterHall, s: setFilterHall }
+            { p: "Filter Venue", v: filterHall, s: setFilterHall } // UI says Venue, Logic uses filterHall
           ].map((f, idx) => (
             <input 
               key={idx} placeholder={f.p} value={f.v} onChange={(e) => f.s(e.target.value)}
@@ -336,7 +319,8 @@ const AllSeminarsPage = () => {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className={`border-b ${isDtao ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50/50"}`}>
-                        {["Hall", "Date", "Start", "End", "Title", "Requester", "Dept", "Email", "Phone", "Applied", "Status", "Source", "Action"].map((h, i) => (
+                        {/* Removed Source, Renamed Hall -> Venue */}
+                        {["Venue", "Date", "Start", "End", "Title", "Requester", "Dept", "Email", "Phone", "Applied", "Status", "Action"].map((h, i) => (
                           <th key={i} className="px-6 py-5 text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -364,19 +348,17 @@ const AllSeminarsPage = () => {
                                   s.status === STATUS_APPROVED ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
                                 }`}>{s.status}</span>
                               </td>
-                              <td className="px-6 py-5 whitespace-nowrap text-[10px] font-bold opacity-30 italic">{s.source}</td>
+                              {/* Removed Source Data Cell */}
                               <td className="px-6 py-5 text-right whitespace-nowrap">
                                 <div className="flex gap-2">
-                                  <button onClick={() => openChangeHall(s)} className="px-4 py-2 rounded-xl bg-sky-500/10 text-sky-500 text-xs font-bold hover:bg-sky-500 hover:text-white transition-all">Update Hall</button>
-                                  <button onClick={() => handleDelete(s)} className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                  </button>
+                                  {/* Removed Delete Button */}
+                                  <button onClick={() => openChangeHall(s)} className="px-4 py-2 rounded-xl bg-sky-500/10 text-sky-500 text-xs font-bold hover:bg-sky-500 hover:text-white transition-all">Update Venue</button>
                                 </div>
                               </td>
                             </motion.tr>
                             {confirmMap[s.id] && (
                               <motion.tr initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }}>
-                                <td colSpan={13} className="px-6 py-3">
+                                <td colSpan={12} className="px-6 py-3">
                                   <div className={`px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${isDtao ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
                                     <div className="w-2 h-2 rounded-full bg-current animate-ping" />
                                     Successfully relocated to: {confirmMap[s.id].hall}
@@ -413,7 +395,7 @@ const AllSeminarsPage = () => {
                         </div>
                         <div className="flex gap-2 pt-2">
                            <button onClick={() => openChangeHall(s)} className="flex-1 py-3 bg-sky-500/10 text-sky-500 rounded-xl text-xs font-bold">Relocate</button>
-                           <button onClick={() => handleDelete(s)} className="flex-1 py-3 bg-red-500/10 text-red-500 rounded-xl text-xs font-bold">Remove</button>
+                           {/* Removed Delete Button from Mobile */}
                         </div>
                         {confirmMap[s.id] && (
                           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`p-3 rounded-xl text-[10px] font-bold ${isDtao ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
@@ -429,16 +411,16 @@ const AllSeminarsPage = () => {
           )}
         </motion.div>
         
-        <p className="text-[10px] opacity-30 uppercase tracking-widest text-center mt-6 italic">Note: Seminar data overrides duplicate requests for the same hall/time slot.</p>
+        <p className="text-[10px] opacity-30 uppercase tracking-widest text-center mt-6 italic">Note: Seminar data overrides duplicate requests for the same venue/time slot.</p>
       </div>
 
-      {/* Change Hall Modal (Premium Kyr Style) */}
+      {/* Change Venue Modal (Premium Kyr Style) */}
       <AnimatePresence>
         {changeHallOpen && changeTarget && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !updatingHall && closeChangeHall()} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className={`relative w-full max-w-lg p-8 rounded-[3rem] border ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white border-white"}`}>
-              <h3 className="text-xl font-bold mb-1">Update <span className="text-blue-500">Hall Selection</span></h3>
+              <h3 className="text-xl font-bold mb-1">Update <span className="text-blue-500">Venue Selection</span></h3>
               <p className="text-[10px] uppercase font-bold opacity-40 mb-6 tracking-widest">{changeTarget.slotTitle}</p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">

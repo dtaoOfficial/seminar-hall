@@ -18,6 +18,7 @@ const LINKS_ADMIN = [
   { to: "/admin/manage-departments", label: "Manage Depts" },
   { to: "/admin/halls", label: "Manage Halls" },
   { to: "/admin/operators", label: "Venue Operators" },
+  { to: "/admin/logs", label: "Logs" }, // ✅ Added Logs Link
 ];
 
 const LINKS_DEPT = [

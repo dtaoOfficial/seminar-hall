@@ -4,12 +4,15 @@ import com.dtao.seminarbooking.model.HallOperator;
 import com.dtao.seminarbooking.model.Seminar;
 import com.dtao.seminarbooking.service.EmailService;
 import com.dtao.seminarbooking.service.HallOperatorService;
+import com.dtao.seminarbooking.service.LogService;
 import com.dtao.seminarbooking.service.SeminarService;
+import jakarta.servlet.http.HttpServletRequest; // Ensure spring-boot-starter-web is present
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal; // ✅ IMPORTED FOR REAL EMAIL LOGGING
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -25,23 +28,43 @@ public class SeminarController {
     private final SeminarService seminarService;
     private final EmailService emailService;
     private final HallOperatorService hallOperatorService;
+    private final LogService logService; // ✅ NEW: Logging Service
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     public SeminarController(SeminarService seminarService,
                              EmailService emailService,
-                             HallOperatorService hallOperatorService) {
+                             HallOperatorService hallOperatorService,
+                             LogService logService) {
         this.seminarService = seminarService;
         this.emailService = emailService;
         this.hallOperatorService = hallOperatorService;
+        this.logService = logService;
     }
 
     @PostMapping
-    public ResponseEntity<?> createSeminar(@RequestBody Seminar seminar) {
+    public ResponseEntity<?> createSeminar(@RequestBody Seminar seminar, HttpServletRequest request) {
         try {
+            // ✅ 1. FORCE PENDING STATUS (Security)
+            seminar.setStatus("PENDING");
+            // If remarks are empty, set a default
+            if (seminar.getRemarks() == null || seminar.getRemarks().isBlank()) {
+                seminar.setRemarks("Waiting for Admin Approval");
+            }
+
             Seminar saved = seminarService.addSeminar(seminar);
 
-            // 1) Send booking confirmation to requester (async fire-and-forget)
+            // ✅ 2. LOGGING
+            logService.logAction(
+                    request,
+                    "CREATE_REQUEST",
+                    saved.getEmail(),
+                    "DEPT",
+                    saved.getId(),
+                    "Requested " + saved.getHallName() + " for " + saved.getSlotTitle()
+            );
+
+            // 3. Send booking confirmation to requester (Acknowledgement)
             try {
                 CompletableFuture<Boolean> f = emailService.sendBookingCreatedEmail(saved);
                 attachLogging(f, "sendBookingCreatedEmail", saved.getEmail());
@@ -49,7 +72,7 @@ public class SeminarController {
                 log.error("[SeminarController] Failed to initiate booking-created email: {}", ex.getMessage(), ex);
             }
 
-            // 2) Notify ALL hall operators for this hall (created event)
+            // 4. Notify ALL hall operators for this hall (New Request Alert)
             try {
                 if (saved.getHallName() != null) {
                     List<HallOperator> heads = hallOperatorService.findByHallName(saved.getHallName());
@@ -65,42 +88,6 @@ public class SeminarController {
                 }
             } catch (Exception ex) {
                 log.error("[SeminarController] Error while finding hall operators on create: {}", ex.getMessage(), ex);
-            }
-
-            // 3) If created already APPROVED (admin-created auto-approve), immediately send APPROVED notifications
-            try {
-                String status = saved.getStatus() == null ? "" : saved.getStatus().toUpperCase();
-                if ("APPROVED".equals(status)) {
-                    String adminReason = "Approved & applied by admin";
-
-                    // notify requester
-                    try {
-                        CompletableFuture<Boolean> f = emailService.sendStatusNotification(saved.getEmail(), saved, "APPROVED", adminReason);
-                        attachLogging(f, "sendStatusNotification(APPROVED)", saved.getEmail());
-                    } catch (Exception ex) {
-                        log.error("[SeminarController] Failed to initiate immediate approved status email to requester: {}", ex.getMessage(), ex);
-                    }
-
-                    // notify all hall operators with approved email
-                    try {
-                        if (saved.getHallName() != null) {
-                            List<HallOperator> heads = hallOperatorService.findByHallName(saved.getHallName());
-                            for (HallOperator head : heads) {
-                                try {
-                                    CompletableFuture<Boolean> f = emailService.sendHallHeadBookingApprovedEmail(head, saved, adminReason);
-                                    attachLogging(f, "sendHallHeadBookingApprovedEmail", head.getHeadEmail());
-                                } catch (Exception ex) {
-                                    log.error("[SeminarController] Failed to initiate hall-head immediate-approved email for head={} : {}",
-                                            head == null ? "null" : head.getHeadEmail(), ex.getMessage(), ex);
-                                }
-                            }
-                        }
-                    } catch (Exception ex) {
-                        log.error("[SeminarController] Error while notifying hall operators for immediate approval: {}", ex.getMessage(), ex);
-                    }
-                }
-            } catch (Exception ex) {
-                log.error("[SeminarController] Error sending immediate approved notifications: {}", ex.getMessage(), ex);
             }
 
             return ResponseEntity.ok(saved);
@@ -134,16 +121,7 @@ public class SeminarController {
         return ResponseEntity.ok(seminarService.getByHallAndDate(date, hallName));
     }
 
-    // ----------------- NEW: calendar month summary -----------------
-    /**
-     * Returns per-day summary for a given month.
-     * Query params:
-     * - hallName (optional) : filters to specific seminar hall
-     * - year (required)
-     * - month (required) : 1-12
-     *
-     * Response: List<CalendarDaySummary>
-     */
+    // ----------------- CALENDAR ENDPOINTS -----------------
     @GetMapping("/calendar")
     public ResponseEntity<?> getCalendarMonthSummary(
             @RequestParam(required = false) String hallName,
@@ -157,45 +135,31 @@ public class SeminarController {
                 return ResponseEntity.badRequest().body(Map.of("error", "month must be between 1 and 12"));
             }
 
+            // reuse existing service method or logic
             LocalDate start = LocalDate.of(year, month, 1);
             LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
-
-            // load all seminars once and filter in-memory (keeps existing service unchanged)
             List<Seminar> all = seminarService.getAllSeminars();
-
-            // if hallName filter provided, normalise
             String hallNameNorm = (hallName == null || hallName.isBlank()) ? null : hallName.trim();
-
-            // Build a map date -> count
             Map<LocalDate, Integer> counts = new HashMap<>();
 
-            // iterate all seminars and mark affected dates
             for (Seminar s : all) {
-                // filter by hallName if requested
                 if (hallNameNorm != null) {
-                    if (s.getHallName() == null || !s.getHallName().equalsIgnoreCase(hallNameNorm)) {
-                        continue;
-                    }
+                    if (s.getHallName() == null || !s.getHallName().equalsIgnoreCase(hallNameNorm)) continue;
                 }
+                // Only count APPROVED bookings for calendar availability?
+                // Usually we count approved. If you want to hide pending, uncomment this:
+                // if (!"APPROVED".equalsIgnoreCase(s.getStatus())) continue;
 
-                // 1) exact date bookings (time bookings)
                 if (s.getDate() != null) {
                     try {
                         LocalDate d = LocalDate.parse(s.getDate(), DATE_FMT);
-                        if (!d.isBefore(start) && !d.isAfter(end)) {
-                            counts.put(d, counts.getOrDefault(d, 0) + 1);
-                        }
-                    } catch (Exception ex) {
-                        // ignore malformed dates
-                    }
+                        if (!d.isBefore(start) && !d.isAfter(end)) counts.put(d, counts.getOrDefault(d, 0) + 1);
+                    } catch (Exception ex) {}
                 }
-
-                // 2) day-range bookings (startDate..endDate)
                 if (s.getStartDate() != null && s.getEndDate() != null) {
                     try {
                         LocalDate sd = LocalDate.parse(s.getStartDate(), DATE_FMT);
                         LocalDate ed = LocalDate.parse(s.getEndDate(), DATE_FMT);
-                        // compute overlap with requested month
                         LocalDate from = sd.isBefore(start) ? start : sd;
                         LocalDate to = ed.isAfter(end) ? end : ed;
                         if (!to.isBefore(from)) {
@@ -205,36 +169,25 @@ public class SeminarController {
                                 curr = curr.plusDays(1);
                             }
                         }
-                    } catch (Exception ex) {
-                        // ignore malformed
-                    }
+                    } catch (Exception ex) {}
                 }
-
-                // 3) daySlots map (specific dates inside a day-range)
                 if (s.getDaySlots() != null && !s.getDaySlots().isEmpty()) {
                     for (String key : s.getDaySlots().keySet()) {
                         try {
                             LocalDate d = LocalDate.parse(key, DATE_FMT);
-                            if (!d.isBefore(start) && !d.isAfter(end)) {
-                                counts.put(d, counts.getOrDefault(d, 0) + 1);
-                            }
-                        } catch (Exception ex) {
-                            // ignore malformed keys
-                        }
+                            if (!d.isBefore(start) && !d.isAfter(end)) counts.put(d, counts.getOrDefault(d, 0) + 1);
+                        } catch (Exception ex) {}
                     }
                 }
             }
 
-            // Build result list for all days in month
             List<CalendarDaySummary> result = new ArrayList<>();
             LocalDate cursor = start;
             while (!cursor.isAfter(end)) {
                 int c = counts.getOrDefault(cursor, 0);
-                boolean free = c == 0;
-                result.add(new CalendarDaySummary(cursor, free, c));
+                result.add(new CalendarDaySummary(cursor, c == 0, c));
                 cursor = cursor.plusDays(1);
             }
-
             return ResponseEntity.ok(result);
         } catch (Exception ex) {
             log.error("[SeminarController] getCalendarMonthSummary error: {}", ex.getMessage(), ex);
@@ -242,52 +195,60 @@ public class SeminarController {
         }
     }
 
-    /**
-     * Returns detailed list of seminars for a date (optional hallName filter).
-     * Example: GET /api/seminars/day/2025-10-15?hallName=Main+Hall
-     */
     @GetMapping("/day/{date}")
     public ResponseEntity<?> getSeminarsForDay(
             @PathVariable String date,
             @RequestParam(required = false) String hallName) {
         try {
             if (hallName != null && !hallName.isBlank()) {
-                // reuse existing service method
-                List<Seminar> res = seminarService.getByHallAndDate(date, hallName);
-                return ResponseEntity.ok(res);
+                return ResponseEntity.ok(seminarService.getByHallAndDate(date, hallName));
             } else {
-                List<Seminar> res = seminarService.getSeminarsByDate(date);
-                return ResponseEntity.ok(res);
+                return ResponseEntity.ok(seminarService.getSeminarsByDate(date));
             }
         } catch (Exception ex) {
             log.error("[SeminarController] getSeminarsForDay error: {}", ex.getMessage(), ex);
             return ResponseEntity.status(500).body(Map.of("error", "Server error"));
         }
     }
-    // ----------------- end calendar endpoints -----------------
 
+    // ----------------- UPDATE / APPROVE / REJECT -----------------
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSeminar(
             @PathVariable String id,
-            @RequestBody Seminar updatedSeminar) {
+            @RequestBody Seminar updatedSeminar,
+            HttpServletRequest request,
+            Principal principal) { // ✅ Added Principal for Real User Email
         try {
-            // fetch before update to detect status change
             Seminar before = seminarService.getById(id).orElse(null);
-            String beforeStatus = before == null ? null : (before.getStatus() == null ? null : before.getStatus().toUpperCase());
+            String beforeStatus = before == null ? "UNKNOWN" : (before.getStatus() == null ? "UNKNOWN" : before.getStatus().toUpperCase());
 
             Seminar seminar = seminarService.updateSeminar(id, updatedSeminar);
             if (seminar == null) {
                 return ResponseEntity.notFound().build();
             }
 
-            String afterStatus = seminar.getStatus() == null ? null : seminar.getStatus().toUpperCase();
+            String afterStatus = seminar.getStatus() == null ? "UNKNOWN" : seminar.getStatus().toUpperCase();
 
-            boolean changed = false;
-            if (beforeStatus == null && afterStatus != null) changed = true;
-            if (beforeStatus != null && afterStatus != null && !beforeStatus.equals(afterStatus)) changed = true;
+            // ✅ LOGGING STATUS CHANGE
+            if (!beforeStatus.equals(afterStatus)) {
+                String action = "UPDATE_STATUS";
+                if ("APPROVED".equals(afterStatus)) action = "APPROVE_SEMINAR";
+                if ("REJECTED".equals(afterStatus)) action = "REJECT_SEMINAR";
+                if ("CANCELLED".equals(afterStatus)) action = "CANCEL_SEMINAR";
 
-            if (changed && afterStatus != null) {
-                // only send for important statuses
+                // ✅ Use Real Email or Fallback
+                String actorEmail = (principal != null) ? principal.getName() : "ADMIN";
+
+                logService.logAction(
+                        request,
+                        action,
+                        actorEmail, // Real Email Logged Here
+                        "ADMIN",
+                        id,
+                        "Status changed from " + beforeStatus + " to " + afterStatus + ". Remarks: " + updatedSeminar.getRemarks()
+                );
+
+                // Send Emails
                 if (afterStatus.equals("APPROVED") || afterStatus.equals("REJECTED")
                         || afterStatus.equals("CANCELLED") || afterStatus.equals("CANCEL_REQUESTED")) {
 
@@ -296,51 +257,31 @@ public class SeminarController {
                         reason = updatedSeminar.getCancellationReason();
                     }
 
-                    // 1) Notify the booking owner (async)
+                    // 1) Notify Requester
                     try {
                         CompletableFuture<Boolean> f = emailService.sendStatusNotification(seminar.getEmail(), seminar, afterStatus, reason);
                         attachLogging(f, "sendStatusNotification(" + afterStatus + ")", seminar.getEmail());
                     } catch (Exception ex) {
-                        log.error("[SeminarController] Failed to initiate status notification to requester: {}", ex.getMessage(), ex);
+                        log.error("[SeminarController] Failed to notify requester", ex);
                     }
 
-                    // 2) Notify ALL hall operators with specialized messages
+                    // 2) Notify Operators
                     try {
                         if (seminar.getHallName() != null) {
                             List<HallOperator> heads = hallOperatorService.findByHallName(seminar.getHallName());
                             for (HallOperator head : heads) {
-                                try {
-                                    CompletableFuture<Boolean> f = null;
-                                    switch (afterStatus) {
-                                        case "APPROVED":
-                                            f = emailService.sendHallHeadBookingApprovedEmail(head, seminar, reason);
-                                            attachLogging(f, "sendHallHeadBookingApprovedEmail", head.getHeadEmail());
-                                            break;
-                                        case "REJECTED":
-                                            f = emailService.sendHallHeadBookingRejectedEmail(head, seminar, reason);
-                                            attachLogging(f, "sendHallHeadBookingRejectedEmail", head.getHeadEmail());
-                                            break;
-                                        case "CANCEL_REQUESTED":
-                                            f = emailService.sendHallHeadBookingCreatedEmail(head, seminar);
-                                            attachLogging(f, "sendHallHeadBookingCreatedEmail (cancel-request)", head.getHeadEmail());
-                                            break;
-                                        case "CANCELLED":
-                                            f = emailService.sendHallHeadBookingCancelledEmail(head, seminar, reason);
-                                            attachLogging(f, "sendHallHeadBookingCancelledEmail", head.getHeadEmail());
-                                            break;
-                                        default:
-                                            break;
-                                    }
-                                } catch (Exception ex) {
-                                    log.error("[SeminarController] Failed to initiate hall-head status email for head={} : {}",
-                                            head == null ? "null" : head.getHeadEmail(), ex.getMessage(), ex);
-                                }
+                                if ("APPROVED".equals(afterStatus)) emailService.sendHallHeadBookingApprovedEmail(head, seminar, reason);
+                                else if ("REJECTED".equals(afterStatus)) emailService.sendHallHeadBookingRejectedEmail(head, seminar, reason);
+                                else if ("CANCELLED".equals(afterStatus)) emailService.sendHallHeadBookingCancelledEmail(head, seminar, reason);
                             }
                         }
                     } catch (Exception ex) {
-                        log.error("[SeminarController] Error notifying hall operators on status change: {}", ex.getMessage(), ex);
+                        log.error("[SeminarController] Error notifying operators", ex);
                     }
                 }
+            } else {
+                // Just a detail update
+                logService.logAction(request, "UPDATE_DETAILS", "ADMIN", "ADMIN", id, "Updated booking details");
             }
 
             return ResponseEntity.ok(seminar);
@@ -353,8 +294,14 @@ public class SeminarController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteSeminar(@PathVariable String id) {
+    public ResponseEntity<Void> deleteSeminar(@PathVariable String id, HttpServletRequest request, Principal principal) { // ✅ Added Principal
         seminarService.getById(id).ifPresent(seminar -> {
+
+            String actorEmail = (principal != null) ? principal.getName() : "ADMIN";
+
+            // ✅ LOGGING DELETE
+            logService.logAction(request, "DELETE_SEMINAR", actorEmail, "ADMIN", id, "Deleted seminar: " + seminar.getSlotTitle());
+
             try {
                 CompletableFuture<Boolean> f = emailService.sendSeminarRemovedEmail(seminar);
                 attachLogging(f, "sendSeminarRemovedEmail", seminar.getEmail());
@@ -362,7 +309,6 @@ public class SeminarController {
                 log.error("[SeminarController] Failed to initiate seminar-removed email: {}", ex.getMessage(), ex);
             }
 
-            // optionally notify hall operator about removal as well
             try {
                 if (seminar.getHallName() != null) {
                     List<HallOperator> heads = hallOperatorService.findByHallName(seminar.getHallName());
@@ -371,13 +317,12 @@ public class SeminarController {
                             CompletableFuture<Boolean> f = emailService.sendHallHeadBookingCancelledEmail(head, seminar, "Booking removed from portal");
                             attachLogging(f, "sendHallHeadBookingCancelledEmail", head.getHeadEmail());
                         } catch (Exception ex) {
-                            log.error("[SeminarController] Failed to initiate hall-head seminar-removed email for head={} : {}",
-                                    head == null ? "null" : head.getHeadEmail(), ex.getMessage(), ex);
+                            log.error("[SeminarController] Failed to notify hall head on delete", ex);
                         }
                     }
                 }
             } catch (Exception ex) {
-                log.error("[SeminarController] Error notifying hall operator on deletion: {}", ex.getMessage(), ex);
+                log.error("[SeminarController] Error notifying hall operator on deletion", ex);
             }
         });
 
@@ -385,7 +330,6 @@ public class SeminarController {
         return ResponseEntity.noContent().build();
     }
 
-    // Dept history (server-side filtered)
     @GetMapping("/history")
     public ResponseEntity<List<Seminar>> getHistory(
             @RequestParam String department,
@@ -393,9 +337,8 @@ public class SeminarController {
         return ResponseEntity.ok(seminarService.getByDepartmentAndEmail(department, email));
     }
 
-    // Dedicated cancel-request endpoint (DEPARTMENT + ADMIN allowed in SecurityConfig)
     @PutMapping("/{id}/cancel-request")
-    public ResponseEntity<?> requestCancel(@PathVariable String id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> requestCancel(@PathVariable String id, @RequestBody Map<String, String> body, HttpServletRequest request) { // ✅ Added Request
         try {
             String remarks = body.getOrDefault("remarks", null);
             String cancellationReason = body.getOrDefault("cancellationReason", null);
@@ -404,30 +347,32 @@ public class SeminarController {
                 return ResponseEntity.notFound().build();
             }
 
-            // send a notification to the booking owner that a cancel was requested (async)
+            // ✅ LOGGING CANCEL REQUEST
+            logService.logAction(
+                    request,
+                    "CANCEL_REQUEST",
+                    updated.getEmail(),
+                    "DEPT",
+                    id,
+                    "Requested cancellation. Reason: " + cancellationReason
+            );
+
+            // Emails...
             try {
-                CompletableFuture<Boolean> f = emailService.sendStatusNotification(updated.getEmail(), updated, "CANCEL_REQUESTED", cancellationReason);
-                attachLogging(f, "sendStatusNotification(CANCEL_REQUESTED)", updated.getEmail());
+                emailService.sendStatusNotification(updated.getEmail(), updated, "CANCEL_REQUESTED", cancellationReason);
             } catch (Exception ex) {
-                log.error("[SeminarController] Failed to initiate cancel-request email to requester: {}", ex.getMessage(), ex);
+                log.error("[SeminarController] Failed to notify requester of cancel-request", ex);
             }
 
-            // notify hall operator too
             try {
                 if (updated.getHallName() != null) {
                     List<HallOperator> heads = hallOperatorService.findByHallName(updated.getHallName());
                     for (HallOperator head : heads) {
-                        try {
-                            CompletableFuture<Boolean> f = emailService.sendHallHeadBookingCreatedEmail(head, updated);
-                            attachLogging(f, "sendHallHeadBookingCreatedEmail (cancel-request)", head.getHeadEmail());
-                        } catch (Exception ex) {
-                            log.error("[SeminarController] Failed to initiate hall-head cancel-request email for head={} : {}",
-                                    head == null ? "null" : head.getHeadEmail(), ex.getMessage(), ex);
-                        }
+                        emailService.sendHallHeadBookingCreatedEmail(head, updated); // Re-using created template as notification
                     }
                 }
             } catch (Exception ex) {
-                log.error("[SeminarController] Error notifying hall operator on cancel-request: {}", ex.getMessage(), ex);
+                log.error("[SeminarController] Error notifying hall operator on cancel-request", ex);
             }
 
             return ResponseEntity.ok(updated);
@@ -439,7 +384,6 @@ public class SeminarController {
         }
     }
 
-    // Optional: search
     @GetMapping("/search")
     public ResponseEntity<List<Seminar>> search(
             @RequestParam(required = false) String department,
@@ -461,7 +405,6 @@ public class SeminarController {
         return ResponseEntity.ok(filtered);
     }
 
-    // -------------------- helper to attach logging to futures --------------------
     private void attachLogging(CompletableFuture<Boolean> future, String operation, String target) {
         if (future == null) return;
         future.whenComplete((ok, ex) -> {
@@ -477,8 +420,6 @@ public class SeminarController {
         });
     }
 
-    // -------------------- small DTO used for calendar responses --------------------
-    // kept as static inner class to avoid adding extra file; can be moved to payload/ later.
     public static class CalendarDaySummary {
         private String date;
         private boolean free;
@@ -492,28 +433,11 @@ public class SeminarController {
             this.bookingCount = bookingCount;
         }
 
-        public String getDate() {
-            return date;
-        }
-
-        public void setDate(String date) {
-            this.date = date;
-        }
-
-        public boolean isFree() {
-            return free;
-        }
-
-        public void setFree(boolean free) {
-            this.free = free;
-        }
-
-        public int getBookingCount() {
-            return bookingCount;
-        }
-
-        public void setBookingCount(int bookingCount) {
-            this.bookingCount = bookingCount;
-        }
+        public String getDate() { return date; }
+        public void setDate(String date) { this.date = date; }
+        public boolean isFree() { return free; }
+        public void setFree(boolean free) { this.free = free; }
+        public int getBookingCount() { return bookingCount; }
+        public void setBookingCount(int bookingCount) { this.bookingCount = bookingCount; }
     }
 }

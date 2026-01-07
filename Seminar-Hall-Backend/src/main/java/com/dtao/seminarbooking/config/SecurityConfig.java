@@ -104,13 +104,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ✅ Seminar endpoints
+                        // ✅ SECURITY LOGS (New Feature) - Strict Admin Access
+                        .requestMatchers("/api/logs/**").hasRole("ADMIN")
+
+                        // ✅ Seminar endpoints (added both /api/seminars and /api/seminars/**)
                         .requestMatchers(HttpMethod.GET, "/api/seminars").hasAnyRole("ADMIN", "DEPARTMENT")
                         .requestMatchers(HttpMethod.GET, "/api/seminars/**").hasAnyRole("ADMIN", "DEPARTMENT")
                         .requestMatchers(HttpMethod.POST, "/api/seminars/**").hasAnyRole("ADMIN", "DEPARTMENT")
-
-                        // ✅ Cancel request allowed by both (⚡ moved above generic PUT rule)
-                        .requestMatchers(HttpMethod.PUT, "/api/seminars/*/cancel-request").hasAnyRole("DEPARTMENT", "ADMIN")
 
                         // ✅ Only Admin can modify or delete seminars
                         .requestMatchers(HttpMethod.PUT, "/api/seminars/*/confirm-cancel").hasRole("ADMIN")
@@ -118,7 +118,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/seminars/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/seminars/**").hasRole("ADMIN")
 
-                        // ✅ Requests
+                        // ✅ Cancel request allowed by both
+                        .requestMatchers(HttpMethod.PUT, "/api/seminars/*/cancel-request").hasAnyRole("DEPARTMENT", "ADMIN")
+
+                        // ✅ Requests (added /api/requests and /api/requests/**)
                         .requestMatchers(HttpMethod.GET, "/api/requests").hasAnyRole("ADMIN", "DEPARTMENT")
                         .requestMatchers(HttpMethod.GET, "/api/requests/**").hasAnyRole("ADMIN", "DEPARTMENT")
                         .requestMatchers(HttpMethod.POST, "/api/requests/**").hasRole("DEPARTMENT")
