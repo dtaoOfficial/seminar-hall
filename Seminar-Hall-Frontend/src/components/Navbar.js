@@ -11,7 +11,7 @@ import { useNotification } from "./NotificationsProvider";
 const LINKS_ADMIN = [
   { to: "/admin", label: "Dashboard", exact: true },
   { to: "/admin/add-user", label: "Add User" },
-  { to: "/admin/add-seminar", label: "Add Seminar" },
+  { to: "/admin/add-seminar", label: "Add Venue" },
   { to: "/admin/requests", label: "Requests" },
   { to: "/admin/seminars", label: "Venue" },
   { to: "/admin/departments", label: "Dept Creds" },
