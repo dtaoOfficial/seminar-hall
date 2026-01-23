@@ -1,137 +1,103 @@
 // src/layouts/AquaGlassLayout.js
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate, useLocation, Link } from "react-router-dom"; // Added Link
 import Navbar from "../components/Navbar";
 import GlobalStyles from "../styles/GlobalStyles";
 import { useTheme } from "../contexts/ThemeContext";
-import useScrollReveal from "../hooks/useScrollReveal";
 import AuthService from "../utils/AuthService";
 
 export default function AquaGlassLayout({ children, user, setUser }) {
   const { theme } = useTheme() || {};
   const [showSmallWarning, setShowSmallWarning] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const checkSize = () => {
-      if (window.innerWidth < 360) setShowSmallWarning(true);
-      else setShowSmallWarning(false);
+      setShowSmallWarning(window.innerWidth < 360);
     };
     checkSize();
     window.addEventListener("resize", checkSize);
     return () => window.removeEventListener("resize", checkSize);
   }, []);
 
-  // Enable scroll reveal site-wide
-  useScrollReveal();
-
-  /** ✅ Logout with safe navigation + user state clear */
   const handleLogout = () => {
     try {
       const path = window.location.pathname || "";
-      const role = path.startsWith("/admin")
-        ? "ADMIN"
-        : path.startsWith("/dept")
-        ? "DEPARTMENT"
-        : null;
+      const role = path.startsWith("/admin") ? "ADMIN" : "DEPARTMENT";
       AuthService.logout(role);
       setUser?.(null);
       navigate("/", { replace: true });
     } catch (err) {
-      console.error("Logout error:", err);
       navigate("/", { replace: true });
     }
   };
 
   const isDtao = theme === "dtao";
+  // Professional Footer Colors
+  const footerText = isDtao ? "text-violet-400" : "text-slate-500";
+  const footerBg = isDtao ? "bg-black/80 border-violet-900/30" : "bg-white/60 border-slate-200";
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-700 ${
-        isDtao
-          ? "bg-gradient-to-br from-black via-violet-950 to-[#1a001a] text-white"
-          : "bg-gradient-to-br from-[#f8fbff] via-[#edf6ff] to-[#e9f5ff] text-slate-900"
-      }`}
-    >
+    <div className={`min-h-screen w-full flex flex-col relative overflow-x-hidden transition-colors duration-700 ${
+      isDtao ? "bg-gradient-to-br from-black via-violet-950 to-[#1a001a] text-white" : "bg-gradient-to-br from-[#f8fbff] via-[#edf6ff] to-[#e9f5ff] text-slate-900"
+    }`}>
       <GlobalStyles />
-
-      {/* Glowing DTAO background blobs */}
+      
+      {/* Background Blobs */}
       {isDtao && (
         <div className="absolute inset-0 -z-10 overflow-hidden">
           <motion.div
-            animate={{ opacity: [0.6, 0.9, 0.6], scale: [1, 1.05, 1] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-24 -left-16 w-[30rem] h-[30rem] rounded-full blur-[160px] bg-violet-700/30"
-          />
-          <motion.div
-            animate={{ opacity: [0.5, 0.8, 0.5], scale: [1, 1.08, 1] }}
-            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -bottom-32 -right-16 w-[34rem] h-[34rem] rounded-full blur-[180px] bg-pink-600/20"
+            animate={{ x: [0, 50, 0], opacity: [0.4, 0.7, 0.4], scale: [1, 1.2, 1] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute -top-24 -left-16 w-[40rem] h-[40rem] rounded-full blur-[160px] bg-violet-700/20"
           />
         </div>
       )}
 
-      {/* Navbar always fixed at top */}
+      {/* ✅ Navbar is HERE (Only one instance now) */}
       <Navbar user={user} handleLogout={handleLogout} />
 
-      {/* ✅ Adjusted padding-top to prevent overlap */}
-      <main className="relative flex-1 z-10 px-4 md:px-6 py-8 max-w-7xl mx-auto pt-24 sm:pt-28 md:pt-32 w-full">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="w-full"
-        >
-          {children}
-        </motion.div>
+      <main className="relative flex-1 z-10 px-4 md:px-6 py-8 max-w-7xl mx-auto pt-24 w-full">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname} 
+            initial={{ opacity: 0, y: 15, filter: "blur(10px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -15, filter: "blur(10px)" }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="w-full"
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
-      <footer
-        className={`relative z-20 py-4 text-center text-xs md:text-sm border-t ${
-          isDtao
-            ? "border-violet-800 bg-black/50 text-violet-300 backdrop-blur-md"
-            : "border-white/30 bg-white/40 text-gray-600 backdrop-blur-xl"
-        }`}
-      >
-        <p>Developed by DTAOofficial — Maheswar Reddy Kuraparthi</p>
-      </footer>
+      {/* ✅ UPDATED FOOTER: No Name, 5 Links added */}
+      <footer className={`relative z-20 py-8 text-center text-xs border-t backdrop-blur-md ${footerBg} ${footerText}`}>
+        <div className="flex flex-col items-center gap-3">
+          
+          {/* 1. Copyright Line */}
+          <p className="font-medium tracking-wide opacity-80">
+            © {new Date().getFullYear()} Venue Management System — All Rights Reserved.
+          </p>
 
-      {/* Small device warning */}
-      {showSmallWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.25 }}
-            className={`rounded-3xl p-6 max-w-sm text-center shadow-2xl border ${
-              isDtao
-                ? "bg-[#1a001a]/90 border-violet-800 text-violet-100"
-                : "bg-white/88 border-white/60 text-gray-800"
-            }`}
-          >
-            <img
-              src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png"
-              alt="NHCE"
-              className="w-20 mx-auto mb-4"
-            />
-            <h2 className="text-lg font-semibold mb-2">Device Not Supported</h2>
-            <p className="text-sm mb-4">
-              Screen is very narrow — rotate or use larger display.
-            </p>
-            <button
-              onClick={() => setShowSmallWarning(false)}
-              className={`px-5 py-2 rounded-xl font-semibold transition ${
-                isDtao
-                  ? "bg-violet-700 hover:bg-violet-600 text-white"
-                  : "bg-gradient-to-r from-blue-400 to-cyan-400 text-white shadow"
-              }`}
-            >
-              Got it
-            </button>
-          </motion.div>
+          {/* 2. The 5 Professional Links (Fake links for UI) */}
+          <div className="flex flex-wrap justify-center gap-4 mt-1 opacity-70">
+            <span className="cursor-pointer hover:underline">Dashboard</span>
+            <span>•</span>
+            <span className="cursor-pointer hover:underline">Bookings</span>
+            <span>•</span>
+            <span className="cursor-pointer hover:underline">Rules & Regulations</span>
+            <span>•</span>
+            <span className="cursor-pointer hover:underline">Privacy Policy</span>
+            <span>•</span>
+            <span className="cursor-pointer hover:underline">Help Center</span>
+          </div>
+
         </div>
-      )}
+      </footer>
     </div>
   );
 }
