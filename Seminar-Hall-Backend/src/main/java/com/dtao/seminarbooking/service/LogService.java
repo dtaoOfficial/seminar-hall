@@ -5,7 +5,7 @@ import com.dtao.seminarbooking.repo.LogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import jakarta.servlet.http.HttpServletRequest; // Use 'javax.servlet' if on older Spring Boot
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -22,12 +22,19 @@ public class LogService {
      * Async method to save logs so it doesn't slow down the main app.
      */
     public void logAction(HttpServletRequest request, String action, String email, String role, String targetId, String details) {
+
+        // --- CRITICAL FIX START ---
+        // We must extract the IP Address HERE (Synchronously) while the request is valid.
+        // If we do this inside CompletableFuture, the request object might be destroyed (recycled) by then.
+        String clientIp = getClientIp(request);
+        // --- CRITICAL FIX END ---
+
         CompletableFuture.runAsync(() -> {
             try {
-                String ip = getClientIp(request);
-                Log entry = new Log(action, email, role, targetId, details, ip);
+                // Now we use the string 'clientIp' we captured earlier, instead of 'request'
+                Log entry = new Log(action, email, role, targetId, details, clientIp);
                 logRepository.save(entry);
-                log.info("[AUDIT] Action: {}, User: {}, IP: {}", action, email, ip);
+                log.info("[AUDIT] Action: {}, User: {}, IP: {}", action, email, clientIp);
             } catch (Exception e) {
                 log.error("Failed to save audit log", e);
             }
