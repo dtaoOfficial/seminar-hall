@@ -1,4 +1,3 @@
-// src/components/Navbar.js
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,6 +7,7 @@ import AuthService from "../utils/AuthService";
 import api from "../utils/api"; 
 import { useNotification } from "./NotificationsProvider"; 
 
+// --- LINKS CONFIG ---
 const LINKS_ADMIN = [
   { to: "/admin", label: "Dashboard", exact: true },
   { to: "/admin/add-user", label: "Add User" },
@@ -18,7 +18,7 @@ const LINKS_ADMIN = [
   { to: "/admin/manage-departments", label: "Manage Depts" },
   { to: "/admin/halls", label: "Manage Halls" },
   { to: "/admin/operators", label: "Venue Operators" },
-  { to: "/admin/logs", label: "Logs" }, // ✅ Added Logs Link
+  { to: "/admin/logs", label: "Logs" },
 ];
 
 const LINKS_DEPT = [
@@ -27,6 +27,99 @@ const LINKS_DEPT = [
   { to: "/dept/status", label: "Status" },
 ];
 
+/* --------------------------------------------------------------------------------
+   HIDDEN COMPONENT: SecretDevCredits
+   Logic: Tapping the wrapper 3 times quickly reveals the developer card.
+   --------------------------------------------------------------------------------
+*/
+function SecretDevCredits({ children }) {
+  const [count, setCount] = useState(0);
+  const [show, setShow] = useState(false);
+
+  // Reset taps if user stops clicking for 1 second
+  useEffect(() => {
+    const timer = setTimeout(() => setCount(0), 1000);
+    return () => clearTimeout(timer);
+  }, [count]);
+
+  const handleTap = (e) => {
+    // Prevent navigation if we are in the middle of a "secret tap sequence"
+    // e.stopPropagation(); // Optional: Uncomment if clicking keeps navigating away too fast
+    setCount((prev) => {
+      const newCount = prev + 1;
+      if (newCount === 3) {
+        setShow(true); 
+        return 0;
+      }
+      return newCount;
+    });
+  };
+
+  return (
+    <>
+      {/* The Trigger Area */}
+      <div onClick={handleTap} className="cursor-default select-none inline-block">
+        {children}
+      </div>
+
+      {/* The Secret Modal */}
+      <AnimatePresence>
+        {show && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShow(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+
+            {/* Dev Card */}
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0, y: 50 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.8, opacity: 0, y: 50 }} 
+              className="relative w-full max-w-sm bg-[#0a0a0a] border border-violet-500/30 rounded-3xl p-8 text-center shadow-2xl overflow-hidden"
+            >
+              {/* Animated Glow Background */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-violet-600/20 blur-[80px] rounded-full pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-violet-600 to-indigo-600 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-violet-500/20">
+                  <span className="text-3xl" role="img" aria-label="rocket">🚀</span>
+                </div>
+
+                <h2 className="text-2xl font-bold text-white mb-1">DTAO OFFICIAL</h2>
+                <p className="text-xs font-bold tracking-[0.2em] text-violet-400 uppercase mb-6">Designed & Built by Maheshwar</p>
+
+                <div className="space-y-3 text-sm text-slate-400 mb-8">
+                  <p>Full Stack Developer</p>
+                  <p className="text-xs opacity-50">Java Spring Boot • React • MongoDB</p>
+                  <a href="https://dtaoofficial.online" target="_blank" rel="noreferrer" className="inline-block mt-2 text-violet-400 hover:text-violet-300 transition-colors">
+                    www.dtaoofficial.online
+                  </a>
+                </div>
+
+                <button 
+                  onClick={() => setShow(false)} 
+                  className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white font-semibold hover:bg-white/10 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+/* --------------------------------------------------------------------------------
+   MAIN COMPONENT: Navbar
+   --------------------------------------------------------------------------------
+*/
 export default function Navbar({ user = {}, handleLogout }) {
   const navigate = useNavigate();
   const { notify } = useNotification();
@@ -51,7 +144,7 @@ export default function Navbar({ user = {}, handleLogout }) {
   const LINKS = role === "DEPARTMENT" ? LINKS_DEPT : LINKS_ADMIN;
   const [visibleCount, setVisibleCount] = useState(Infinity);
 
-  // --- 1. Notification Polling Logic (Fully Intact) ---
+  // --- 1. Notification Polling Logic ---
   useEffect(() => {
     if (role !== "ADMIN") return;
     let lastKnownCount = -1;
@@ -78,7 +171,7 @@ export default function Navbar({ user = {}, handleLogout }) {
     }
   }, [shake]);
 
-  // --- 2. Measurement Logic (Fully Intact) ---
+  // --- 2. Measurement Logic ---
   const computeVisibleCount = useCallback(() => {
     const container = navContainerRef.current;
     if (!container) return LINKS.length;
@@ -146,9 +239,22 @@ export default function Navbar({ user = {}, handleLogout }) {
           <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-6 h-full">
             <div className="flex items-center gap-3">
               {isMobile && <button onClick={() => setDrawerOpen(true)} className="text-2xl px-2 dark:text-white">☰</button>}
-              <div className="cursor-pointer" onClick={() => navigate(role === "DEPARTMENT" ? "/dept" : "/admin")}>
-                <img src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png" alt="Logo" className="h-10 object-contain" />
+              
+              {/* ✅ SECRET TRIGGER IS HERE (WRAPPING THE LOGO) */}
+              <div className="cursor-pointer">
+                <SecretDevCredits>
+                   <img 
+                     src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png" 
+                     alt="Logo" 
+                     className="h-10 object-contain" 
+                     onClick={() => {
+                        // Standard click navigation still works, but tapping 3x triggers secret
+                        navigate(role === "DEPARTMENT" ? "/dept" : "/admin");
+                     }}
+                   />
+                </SecretDevCredits>
               </div>
+
             </div>
 
             <div className="flex-1 px-4 min-w-0">
@@ -233,7 +339,10 @@ export default function Navbar({ user = {}, handleLogout }) {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDrawerOpen(false)} className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" />
             <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="fixed right-0 top-0 h-full w-72 bg-white dark:bg-zinc-950 z-[70] p-6 shadow-2xl flex flex-col">
                <div className="flex justify-between items-center mb-8">
-                 <img src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png" className="h-8" alt="Logo" />
+                 {/* ✅ SECRET TRIGGER ADDED TO MOBILE LOGO TOO */}
+                 <SecretDevCredits>
+                    <img src="https://res.cloudinary.com/duhki4wze/image/upload/v1756755114/nhce_25-scaled-2_a6givc.png" className="h-8" alt="Logo" />
+                 </SecretDevCredits>
                  <button onClick={() => setDrawerOpen(false)} className="text-xl">✕</button>
                </div>
                <nav className="flex flex-col gap-2 overflow-y-auto">

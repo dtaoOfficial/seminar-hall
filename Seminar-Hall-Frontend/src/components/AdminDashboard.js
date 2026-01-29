@@ -1,11 +1,9 @@
-// src/components/AdminDashboard.js
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import { CSVLink } from "react-csv";
 import api from "../utils/api";
 import { useNotification } from "../components/NotificationsProvider";
 import { useTheme } from "../contexts/ThemeContext";
-import { motion } from "framer-motion";
 
 /* ---------- Pages ---------- */
 import AddUserPage from "../pages/Admin/AddUserPage";

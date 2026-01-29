@@ -1,4 +1,4 @@
-// src/pages/RequestsPage.js
+// src/pages/Admin/RequestsPage.js
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion"; 
 import api from "../../utils/api";
@@ -46,7 +46,6 @@ function Dropdown({ options = [], value, onChange, className = "", ariaLabel = "
             initial={{ opacity: 0, y: -10 }} 
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: -10 }}
-            /* Increased Z-Index to fix "under text" issue */
             className={`absolute z-[9999] mt-2 w-full rounded-xl shadow-2xl backdrop-blur-xl border ${
               isDtao ? "bg-black border-violet-500/40 text-slate-100" : "bg-white border-gray-200 text-slate-900"
             } overflow-hidden`}
@@ -81,14 +80,10 @@ const RequestsPage = () => {
   const [items, setItems] = useState([]);
   const [searchDeptRaw, setSearchDeptRaw] = useState("");
   const [searchDateRaw, setSearchDateRaw] = useState("");
-  
-  // UPDATED: Default to "PENDING" instead of "ALL"
   const [statusFilterRaw, setStatusFilterRaw] = useState("PENDING");
   
   const [searchDept, setSearchDept] = useState("");
   const [searchDate, setSearchDate] = useState("");
-  
-  // UPDATED: Default to "PENDING"
   const [statusFilter, setStatusFilter] = useState("PENDING");
 
   const [remarksMap, setRemarksMap] = useState({});
@@ -99,11 +94,9 @@ const RequestsPage = () => {
   const prevIdsRef = useRef(new Set());
   const pollingRef = useRef(null);
   const mountedRef = useRef(true);
-  const blinkTimeoutRef = useRef(null);
   const debounceTimers = useRef({});
 
   const [rejectModal, setRejectModal] = useState({ open: false, normId: null });
-  const mainRef = useRef(null);
   const rejectTextareaRef = useRef(null);
   const [expanded, setExpanded] = useState(() => new Set());
 
@@ -262,7 +255,17 @@ const RequestsPage = () => {
     const status = (r.status ?? "").toUpperCase();
     if (statusFilter !== "ALL" && status !== statusFilter) return false;
     if (searchDept && !(r.department ?? "").toLowerCase().includes(searchDept.toLowerCase())) return false;
-    if (searchDate && (r.date || "").split("T")[0] !== searchDate) return false;
+    
+    // Updated date filter to handle day ranges
+    if (searchDate) {
+        if (r.date) {
+            // Time wise -> match exact
+            if (r.date.split("T")[0] !== searchDate) return false;
+        } else if (r.startDate && r.endDate) {
+            // Day wise -> check if searchDate is within range
+            if (searchDate < r.startDate || searchDate > r.endDate) return false;
+        }
+    }
     return true;
   });
 
@@ -278,6 +281,9 @@ const RequestsPage = () => {
     if (st === "CANCEL_REQUESTED") return "bg-orange-500/10 text-orange-500";
     return "bg-slate-500/10 text-slate-500";
   };
+
+  // --- HELPER: Is Day Wise? ---
+  const isDayWise = (r) => !!(r.startDate && r.endDate);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`min-h-screen pt-24 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
@@ -304,12 +310,10 @@ const RequestsPage = () => {
               <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2 block">Date</label>
               <input type="date" value={searchDateRaw} onChange={(e) => setSearchDateRaw(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl border outline-none ${isDtao ? "bg-white/5 border-white/10 text-white" : "bg-white border-gray-200"}`} />
             </div>
-            {/* Slot Dropdown removed as requested */}
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2 block">Status</label>
               <Dropdown options={[{value: "ALL", label: "All Status"}, "PENDING", "APPROVED", "REJECTED", "CANCEL_REQUESTED", "CANCELLED"]} value={statusFilterRaw} onChange={setStatusFilterRaw} />
             </div>
-            {/* UPDATED: Reset now resets to "PENDING" to maintain clean view */}
             <button onClick={() => {setSearchDeptRaw(""); setSearchDateRaw(""); setStatusFilterRaw("PENDING");}} className={`px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest ${isDtao ? "bg-white/5 text-slate-400" : "bg-slate-200 text-slate-600"}`}>Reset</button>
           </div>
         </motion.div>
@@ -321,6 +325,17 @@ const RequestsPage = () => {
               const id = r.normId;
               const isExpanded = expanded.has(id);
               const blink = blinkIds.has(String(id));
+              
+              // Determine display values based on type
+              const isDayRange = isDayWise(r);
+              const displayDate = isDayRange 
+                  ? `${formatDateNice(r.startDate)} → ${formatDateNice(r.endDate)}`
+                  : formatDateNice(r.date);
+                  
+              const displayTime = isDayRange 
+                  ? "Day Wise / Multi-Day" 
+                  : `${formatTime(r.startTime)} - ${formatTime(r.endTime)}`;
+
               return (
                 <motion.div
                   layout key={id} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
@@ -331,35 +346,46 @@ const RequestsPage = () => {
                   <div className="flex flex-col lg:flex-row justify-between gap-6">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-3">
-                         <h3 className="font-bold text-lg text-blue-500">{r.hallName || "TBD"}</h3>
-                         <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-wider ${getStatusStyle(r.status)}`}>{r.status}</span>
-                         {newIdsSet.has(id) && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                          <h3 className="font-bold text-lg text-blue-500">{r.hallName || "TBD"}</h3>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-wider ${getStatusStyle(r.status)}`}>{r.status}</span>
+                          {newIdsSet.has(id) && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
                       </div>
-                      <div className="text-sm font-bold opacity-80 uppercase tracking-widest">{r.department} • {formatDateNice(r.date)}</div>
+                      
+                      <div className="text-sm font-bold opacity-80 uppercase tracking-widest">
+                          {r.department} • {displayDate}
+                      </div>
+                      
                       <div className="flex items-center gap-4 text-xs opacity-50 font-medium">
-                         <div className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="3"/></svg>{formatTime(r.startTime)} - {formatTime(r.endTime)}</div>
-                         <div className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeWidth="3"/></svg>{r.bookingName}</div>
+                          <div className="flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeWidth="3"/></svg>
+                              {displayTime}
+                          </div>
+                          <div className="flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeWidth="3"/></svg>
+                              {r.bookingName}
+                          </div>
                       </div>
+                      
                       <div className="text-sm font-semibold opacity-70 italic">"{r.slotTitle || "Seminar Booking"}"</div>
                     </div>
 
                     <div className="w-full lg:w-96 flex flex-col justify-center gap-3">
                       <input type="text" placeholder="Remarks..." value={remarksMap[id] ?? ""} onChange={(e) => setRemarksMap({...remarksMap, [id]: e.target.value})} className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500" : "bg-slate-50 border-gray-100 focus:border-blue-500"}`} />
                       <div className="flex gap-2">
-                         {r.status === "PENDING" && (
-                           <>
-                             <button onClick={() => handleApprove(id)} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Approve</button>
-                             <button onClick={() => setRejectModal({ open: true, normId: id })} className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-bold">Reject</button>
-                           </>
-                         )}
-                         {r.status === "CANCEL_REQUESTED" && (
-                           <>
-                             <button onClick={() => handleConfirmCancel(id)} className="flex-1 py-2.5 bg-orange-600 text-white rounded-xl text-xs font-bold">Accept Cancel</button>
-                             <button onClick={() => handleRejectCancel(id)} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold">Deny Cancel</button>
-                           </>
-                         )}
-                         <button onClick={() => {saveRemarks(id); setNewIdsSet(prev => {const n=new Set(prev); n.delete(id); return n;})}} className={`px-4 rounded-xl font-bold text-xs ${isDtao ? "bg-white/5 text-white" : "bg-slate-100 text-slate-700"}`}>Save</button>
-                         <button onClick={() => toggleExpanded(id)} className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-bold">{isExpanded ? "Less" : "Details"}</button>
+                          {r.status === "PENDING" && (
+                            <>
+                              <button onClick={() => handleApprove(id)} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20">Approve</button>
+                              <button onClick={() => setRejectModal({ open: true, normId: id })} className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-bold">Reject</button>
+                            </>
+                          )}
+                          {r.status === "CANCEL_REQUESTED" && (
+                            <>
+                              <button onClick={() => handleConfirmCancel(id)} className="flex-1 py-2.5 bg-orange-600 text-white rounded-xl text-xs font-bold">Accept Cancel</button>
+                              <button onClick={() => handleRejectCancel(id)} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold">Deny Cancel</button>
+                            </>
+                          )}
+                          <button onClick={() => {saveRemarks(id); setNewIdsSet(prev => {const n=new Set(prev); n.delete(id); return n;})}} className={`px-4 rounded-xl font-bold text-xs ${isDtao ? "bg-white/5 text-white" : "bg-slate-100 text-slate-700"}`}>Save</button>
+                          <button onClick={() => toggleExpanded(id)} className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-bold">{isExpanded ? "Less" : "Details"}</button>
                       </div>
                     </div>
                   </div>
@@ -371,19 +397,32 @@ const RequestsPage = () => {
                            <div>
                               <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-3 text-blue-500">Logistics</h4>
                               <div className="space-y-2 text-xs">
-                                 <div className="flex justify-between font-medium opacity-70"><span>Email:</span><span>{r.bookingEmail || "—"}</span></div>
-                                 <div className="flex justify-between font-medium opacity-70"><span>Phone:</span><span>{r.bookingPhone || "—"}</span></div>
+                                 <div className="flex justify-between font-medium opacity-70"><span>Email:</span><span>{r.email || "—"}</span></div>
+                                 <div className="flex justify-between font-medium opacity-70"><span>Phone:</span><span>{r.phone || "—"}</span></div>
                                  <div className="flex justify-between font-medium opacity-70"><span>Applied:</span><span>{r.appliedAt ? new Date(r.appliedAt).toLocaleString() : "—"}</span></div>
                               </div>
                            </div>
-                           <div className="space-y-2">
-                              <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-3 text-blue-500">Day Slots</h4>
-                              {r.daySlots ? Object.keys(r.daySlots).map(k => (
-                                <div key={k} className="text-xs bg-white/5 p-2 rounded-lg border border-white/5">
-                                  <strong>{k}:</strong> {r.daySlots[k] ? `${r.daySlots[k].startTime} - ${r.daySlots[k].endTime}` : "Full Day"}
+                           
+                           {/* SHOW DAY SLOTS ONLY IF DAY WISE */}
+                           {isDayRange && (
+                               <div className="space-y-2">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-3 text-blue-500">Day Wise Schedule</h4>
+                                  {r.daySlots && Object.keys(r.daySlots).length > 0 ? Object.keys(r.daySlots).sort().map(k => (
+                                    <div key={k} className="text-xs bg-white/5 p-2 rounded-lg border border-white/5 flex justify-between">
+                                      <strong>{formatDateNice(k)}:</strong> 
+                                      <span>{r.daySlots[k] ? `${formatTime(r.daySlots[k].startTime)} - ${formatTime(r.daySlots[k].endTime)}` : "Full Day"}</span>
+                                    </div>
+                                  )) : <div className="text-xs opacity-50">Full Day Booking for all days in range</div>}
+                               </div>
+                           )}
+                           
+                           {/* SHOW REMARKS HISTORY */}
+                           {r.cancellationReason && (
+                                <div className="md:col-span-2 mt-4 bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                                    <h4 className="text-[10px] font-bold uppercase text-red-500 mb-1">Cancellation Reason</h4>
+                                    <p className="text-xs opacity-80">{r.cancellationReason}</p>
                                 </div>
-                              )) : <div className="text-xs opacity-50">Single Day Booking</div>}
-                           </div>
+                           )}
                         </div>
                       </motion.div>
                     )}

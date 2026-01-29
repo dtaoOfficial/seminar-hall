@@ -1,6 +1,6 @@
 // src/pages/Admin/ManageHallsPage.js
 import React, { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion"; 
+import { motion, AnimatePresence } from "framer-motion"; // Added for smooth animations
 import api from "../../utils/api";
 import { useNotification } from "../../components/NotificationsProvider";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -80,12 +80,10 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
     }
   };
 
-  // ✅ FIXED START EDIT: Added window.scrollTo to bring form into view
   const openEdit = (hall) => {
     setEditingHall(hall.id ?? hall._id);
     setEditName(hall.name || "");
     setEditCapacity(hall.capacity != null ? String(hall.capacity) : "");
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Brings the edit modal into view
   };
 
   const handleEditHall = async (id) => {
@@ -124,14 +122,13 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
 
   // --- Theme UI Config ---
   const buttonPrimary = isDtao ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-violet-500/20" : "bg-gradient-to-r from-blue-600 to-cyan-500 hover:shadow-blue-500/20";
-  const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl shadow-2xl" : "bg-white/70 border-white/40 backdrop-blur-md shadow-xl shadow-blue-500/5";
+  const glassCard = isDtao ? "bg-white/5 border-white/10 backdrop-blur-xl" : "bg-white/70 border-white/40 backdrop-blur-md shadow-xl shadow-blue-500/5";
 
   return (
-    // FIX: Changed pt-24 to pt-4 for tight layout
     <motion.div 
       initial={{ opacity: 0 }} 
       animate={{ opacity: 1 }} 
-      className={`min-h-screen pt-4 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}
+      className={`min-h-screen pt-24 pb-12 transition-colors duration-500 ${isDtao ? "bg-[#08050b] text-slate-100" : "bg-slate-50 text-slate-900"}`}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
@@ -153,7 +150,7 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
           </motion.button>
         </div>
 
-        {/* Add Hall Form */}
+        {/* Add Hall Form (Glass Layout) */}
         <motion.form 
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -167,7 +164,7 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
               placeholder="Ex: APJ Abdul Kalam Hall"
               value={newHall}
               onChange={(e) => setNewHall(e.target.value)}
-              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500 text-slate-900"}`}
+              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500"}`}
             />
           </div>
           <div className="w-full sm:w-32">
@@ -178,7 +175,7 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
               placeholder="000"
               value={newCapacity}
               onChange={(e) => setNewCapacity(e.target.value)}
-              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500 text-slate-900"}`}
+              className={`w-full px-4 py-3 rounded-2xl outline-none border transition-all text-sm ${isDtao ? "bg-white/5 border-white/10 focus:border-violet-500 text-white" : "bg-white border-gray-100 focus:border-blue-500"}`}
             />
           </div>
           <motion.button 
@@ -255,6 +252,13 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
                     <button onClick={() => handleDeleteHall(hall.id ?? hall._id)} className="p-2 rounded-xl bg-red-500/10 text-red-600">Delete</button>
                   </div>
                 </div>
+                {hall.photos?.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {hall.photos.map((p, i) => (
+                      <img key={i} src={p} onClick={() => setPreviewUrl(p)} className="w-20 h-20 rounded-2xl object-cover border border-white/10 cursor-pointer" alt="hall" />
+                    ))}
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>
@@ -264,10 +268,10 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
         {loading && <div className="py-20 text-center opacity-40 animate-pulse">Synchronizing halls...</div>}
         {!loading && effectiveHalls.length === 0 && <div className="py-20 text-center opacity-40">No halls found in the database.</div>}
 
-        {/* Edit Modal (Fixed centering logic) */}
+        {/* Edit Modal (Kyr Style) */}
         <AnimatePresence>
           {editingHall && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setEditingHall(null)}
@@ -277,17 +281,17 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className={`relative w-full max-w-md p-8 rounded-[2rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10 text-white" : "bg-white border-white text-slate-900"}`}
+                className={`relative w-full max-w-md p-8 rounded-[2rem] border shadow-2xl ${isDtao ? "bg-[#120a1a] border-white/10" : "bg-white border-white"}`}
               >
                 <h3 className="text-xl font-bold mb-6">Modify Venue Details</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="text-xs font-bold opacity-50 ml-1">Venue Name</label>
-                    <input className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100 text-slate-900"}`} value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    <input className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} value={editName} onChange={(e) => setEditName(e.target.value)} />
                   </div>
                   <div>
                     <label className="text-xs font-bold opacity-50 ml-1">Seating Capacity</label>
-                    <input type="number" className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100 text-slate-900"}`} value={editCapacity} onChange={(e) => setEditCapacity(e.target.value)} />
+                    <input type="number" className={`w-full px-4 py-3 rounded-2xl border outline-none mt-1 ${isDtao ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`} value={editCapacity} onChange={(e) => setEditCapacity(e.target.value)} />
                   </div>
                 </div>
                 <div className="flex gap-3 mt-8">
@@ -299,12 +303,12 @@ const ManageHallsPage = ({ halls = [], fetchHalls }) => {
           )}
         </AnimatePresence>
 
-        {/* Photo Preview */}
+        {/* Photo Preview (Kyr Style) */}
         <AnimatePresence>
           {previewUrl && (
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[210] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl"
+              className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl"
               onClick={() => setPreviewUrl(null)}
             >
               <motion.img 

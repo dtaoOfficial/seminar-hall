@@ -1,4 +1,3 @@
-// File: src/main/java/com/dtao/seminarbooking/repo/SeminarRepository.java
 package com.dtao.seminarbooking.repo;
 
 import com.dtao.seminarbooking.model.Seminar;
@@ -10,39 +9,61 @@ import java.util.List;
 @Repository
 public interface SeminarRepository extends MongoRepository<Seminar, String> {
 
-    // Existing basic queries
-    List<Seminar> findByHallNameAndDateAndSlot(String hallName, String date, String slot);
+    // =========================================================================
+    // 1. BASIC FINDERS
+    // =========================================================================
     List<Seminar> findByDate(String date);
     List<Seminar> findByDateAndHallName(String date, String hallName);
     List<Seminar> findByDepartmentAndEmail(String department, String email);
+    List<Seminar> findByStatusIgnoreCase(String status);
 
-    // --- For calendar feature support ---
+    // =========================================================================
+    // 2. RANGE / OVERLAP FINDERS (The "Magic" Queries)
+    // =========================================================================
 
-    // ✅ Find all day-range bookings for a hall that overlap a given date
-    // Used for both single day and month-wide calendar lookups
+    /**
+     * Finds overlapping Day-Wise (Multi-day) bookings.
+     * Logic: Overlap exists if (ExistingStart <= ReqEnd) AND (ExistingEnd >= ReqStart).
+     * * Usage in Service:
+     * findByHallNameAndStartDateLessThanEqualAndEndDateGreaterThanEqual(hall, reqEndDate, reqStartDate)
+     */
     List<Seminar> findByHallNameAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             String hallName,
-            String startDate,
-            String endDate
+            String reqEndDate,   // Pass your requested END date here
+            String reqStartDate  // Pass your requested START date here
     );
 
-    // ✅ Find all time-based bookings (seminar.date) for a hall between two dates (inclusive)
+    /**
+     * Global version of the above (when hallName is not specified, e.g., Calendar view of all halls)
+     */
+    List<Seminar> findByStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            String reqEndDate,
+            String reqStartDate
+    );
+
+    // =========================================================================
+    // 3. CALENDAR & REPORTING HELPERS
+    // =========================================================================
+
+    /**
+     * Finds all Time-Wise (Single Date) bookings within a specific range.
+     * Useful for fetching a whole month's calendar data.
+     */
     List<Seminar> findByHallNameAndDateBetween(
             String hallName,
-            String startDate,
-            String endDate
+            String startRange, // e.g., "2026-01-01"
+            String endRange    // e.g., "2026-01-31"
     );
 
-    // ✅ (NEW) For global calendar lookup — when hallName not specified
-    List<Seminar> findByDateBetween(String startDate, String endDate);
+    /**
+     * Global version of the above (for all halls)
+     */
+    List<Seminar> findByDateBetween(String startRange, String endRange);
 
-    // ✅ (NEW) For global day-range lookup — when hallName not specified
-    List<Seminar> findByStartDateLessThanEqualAndEndDateGreaterThanEqual(
-            String startDate,
-            String endDate
-    );
+    // =========================================================================
+    // 4. DEPARTMENT SPECIFIC (For "My Bookings" / History)
+    // =========================================================================
 
-    // ✅ Department-based calendar lookups
     List<Seminar> findByDepartmentAndDateBetween(
             String department,
             String startDate,
@@ -51,9 +72,7 @@ public interface SeminarRepository extends MongoRepository<Seminar, String> {
 
     List<Seminar> findByDepartmentAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             String department,
-            String startDate,
-            String endDate
+            String endDate,
+            String startDate
     );
-    List<Seminar> findByStatusIgnoreCase(String status);
-
 }

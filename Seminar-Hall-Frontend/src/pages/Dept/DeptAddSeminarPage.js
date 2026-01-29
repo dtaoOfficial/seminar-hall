@@ -19,7 +19,8 @@ const ymd = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 };
 
-const build15MinOptions = (startHour = 8, endHour = 18) => {
+// ✅ FIX: Start at 6 (6:00 AM) and End at 23 (11:00 PM)
+const build15MinOptions = (startHour = 6, endHour = 23) => {
   const out = [];
   for (let h = startHour; h <= endHour; h++) {
     for (let m = 0; m < 60; m += 15) {
@@ -29,7 +30,9 @@ const build15MinOptions = (startHour = 8, endHour = 18) => {
   }
   return out;
 };
-const TIME_OPTIONS = build15MinOptions(8, 18);
+
+// ✅ FIX: Generate the list using the new range (6 AM - 11 PM)
+const TIME_OPTIONS = build15MinOptions(6, 23);
 
 const hhmmToMinutes = (hhmm) => {
   if (!hhmm) return null;
@@ -108,13 +111,7 @@ function BookingCard({ booking, isDtao }) {
   const title = booking.slotTitle || booking.title || booking.topic || "Untitled";
   const dept = booking.department || booking.dept || booking.departmentName || "—";
   const dateStr = (booking.date || booking.startDate || "").toString().split("T")[0];
-  
-  // Show "Multi-day" if it's a range booking
-  const isRange = booking.startDate && booking.endDate;
-  const timeStr = isRange 
-    ? "Day Wise / Full Day" 
-    : (booking.startTime && booking.endTime ? `${to12Label(booking.startTime)} – ${to12Label(booking.endTime)}` : "Full Day");
-    
+  const timeStr = booking.startTime && booking.endTime ? `${to12Label(booking.startTime)} – ${to12Label(booking.endTime)}` : booking.type === "day" ? "Full day" : "—";
   const status = (booking.status || "APPROVED").toString();
   const organizer = booking.bookingName || booking.organizer || booking.requesterName || booking.userName || "—";
 
@@ -125,9 +122,7 @@ function BookingCard({ booking, isDtao }) {
           <div className="text-xs uppercase tracking-[0.14em] text-slate-400">{dept}</div>
           <div className="font-semibold">{title}</div>
           <div className="text-xs mt-1 text-slate-500">Hall: <span className="font-medium">{hallName}</span></div>
-          <div className="text-xs text-slate-500">
-             {isRange ? `Range: ${booking.startDate} to ${booking.endDate}` : `Date: ${dateStr}`} • {timeStr}
-          </div>
+          <div className="text-xs text-slate-500">Date: {dateStr} • Time: {timeStr}</div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className={`text-xs px-2 py-0.5 rounded-full ${status.toUpperCase() === "APPROVED" ? "bg-emerald-100 text-emerald-700" : status.toUpperCase() === "REJECTED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{status}</span>
@@ -175,14 +170,14 @@ export default function DeptAddSeminarPage() {
   const [department, setDepartment] = useState("");
   const [phone, setPhone] = useState("");
   const [date, setDate] = useState(new Date());
-  const [startTime, setStartTime] = useState(TIME_OPTIONS[4] || "09:00");
-  const [endTime, setEndTime] = useState(TIME_OPTIONS[8] || "10:00");
+  
+  // ✅ FIX: Start = 09:00 AM (Index 12 in new array) | End = 10:00 AM (Index 16 in new array)
+  const [startTime, setStartTime] = useState(TIME_OPTIONS[12] || "09:00");
+  const [endTime, setEndTime] = useState(TIME_OPTIONS[16] || "10:00");
+  
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
-  
-  // ✅ INITIAL STATE FIXED: Defaults to empty, so NO times are pre-selected
   const [daySlots, setDaySlots] = useState({});
-  
   const [halls, setHalls] = useState([]);
   const [seminars, setSeminars] = useState([]);
   const [selectedHall, setSelectedHall] = useState("");
@@ -260,7 +255,7 @@ export default function DeptAddSeminarPage() {
     setSelectedHallObj(obj || null);
   }, [selectedHall, halls]);
 
-  /* ---------- Normalize Seminars (FIXED FOR RED CALENDAR) ---------- */
+  /* ---------- Normalize Seminars ---------- */
   const normalizedBookings = useMemo(() => {
     const map = new Map();
     const toDateKey = (value) => {
@@ -276,8 +271,7 @@ export default function DeptAddSeminarPage() {
         const hallName = s.hallName || s.hall?.name || "";
         const hallId = s.hallId || s.hall?._id || s.hall?.id || "";
 
-        // ✅ 1. DAY RANGE BOOKING -> Force FULL DAY (Red) for all days in range
-        if (s.startDate && s.endDate) {
+        if (s.startDate && s.endDate && !s.daySlots) {
           const sdKey = toDateKey(s.startDate);
           const edKey = toDateKey(s.endDate);
           if (!sdKey || !edKey) return;
@@ -285,26 +279,40 @@ export default function DeptAddSeminarPage() {
           days.forEach((d) => {
             const key = ymd(d);
             const arr = map.get(key) || [];
-            
-            // 🔥 FORCE "type: day" (Full Day) even if daySlots has specific times.
-            // This ensures Day Wise bookings always show as RED in calendar.
             arr.push({ date: key, startMin: 0, endMin: 1440, hallName, hallId, original: s, type: "day" });
-            
             map.set(key, arr);
           });
           return;
         }
 
-        // 2. Time Booking (Single Date)
+        if (s.daySlots && typeof s.daySlots === "object") {
+          const keys = Object.keys(s.daySlots || {}).sort();
+          if (keys.length === 0) return;
+          for (const key of keys) {
+            const val = s.daySlots[key];
+            const arr = map.get(key) || [];
+            if (!val) {
+              arr.push({ date: key, startMin: 0, endMin: 1440, hallName, hallId, original: s, type: "day" });
+            } else {
+              const sMin = hhmmToMinutes(val.startTime || val.start);
+              const eMin = hhmmToMinutes(val.endTime || val.end);
+              if (sMin != null && eMin != null) {
+                arr.push({ date: key, startMin: sMin, endMin: eMin, hallName, hallId, original: s, type: "time" });
+              } else {
+                arr.push({ date: key, startMin: 0, endMin: 1440, hallName, hallId, original: s, type: "day" });
+              }
+            }
+            map.set(key, arr);
+          }
+          return;
+        }
+
         const dateKey = toDateKey(s.date) || toDateKey(s.startDate) || toDateKey(new Date());
         if (!dateKey) return;
         const arr = map.get(dateKey) || [];
-        
         if (!s.startTime || !s.endTime) {
-          // Full Day (Red)
           arr.push({ date: dateKey, startMin: 0, endMin: 1440, hallName, hallId, original: s, type: "day" });
         } else {
-          // Partial Time (Yellow)
           const sMin = hhmmToMinutes(s.startTime);
           const eMin = hhmmToMinutes(s.endTime);
           if (sMin == null || eMin == null) {
@@ -333,14 +341,11 @@ export default function DeptAddSeminarPage() {
     }
     const hallBookings = arr.filter((b) => b.hallName === hallKey || String(b.hallId) === String(hallKey));
     if (hallBookings.length === 0) return "free";
-    
-    // If ANY booking on this day is "full" type (from Day Range or Full Day), show Red
     if (hallBookings.some((b) => b.type === "day" || (b.startMin === 0 && b.endMin === 1440))) return "full";
     return "partial";
   };
 
   /* ---------- Availability Check ---------- */
-  
   const checkTimeWiseAvailability = () => {
     if (!selectedHall) return { ok: false, msg: "Please select a hall (Venue) first." };
     if (!date) return { ok: false, msg: "Pick a date." };
@@ -359,7 +364,7 @@ export default function DeptAddSeminarPage() {
       return intervalsOverlap(sMin, eMin, b.startMin, b.endMin);
     });
 
-    if (overlapping.length > 0) return { ok: false, msg: "Sorry, this slot is not available." };
+    if (overlapping.length > 0) return { ok: false, msg: "Sorry, this slot is already booked and not available." };
     return { ok: true, msg: `Available ${to12Label(startTime)} — ${to12Label(endTime)} on ${ds}` };
   };
 
@@ -409,8 +414,8 @@ export default function DeptAddSeminarPage() {
 
   const resetForm = () => {
     setSlotTitle("");
-    setStartTime(TIME_OPTIONS[4] || "09:00");
-    setEndTime(TIME_OPTIONS[8] || "10:00");
+    setStartTime(TIME_OPTIONS[12] || "09:00");
+    setEndTime(TIME_OPTIONS[16] || "10:00");
     setStartDate(new Date());
     setEndDate(new Date());
     setDaySlots({});
@@ -436,9 +441,7 @@ export default function DeptAddSeminarPage() {
       const payload = bookingMode === "time" ? {
         hallName: selectedHall || selectedHallObj?.name, slot: "Custom", slotTitle, bookingName, email, department, phone, status: "PENDING", remarks: DEFAULT_REMARKS, appliedAt: nowIso, date: ymd(date), startTime, endTime
       } : {
-        hallName: selectedHall || selectedHallObj?.name, slot: "DayRange", slotTitle, bookingName, email, department, phone, status: "PENDING", remarks: DEFAULT_REMARKS, appliedAt: nowIso, startDate: ymd(startDate), endDate: ymd(endDate), 
-        // ✅ Payload logic: If custom times exist, send them. Else send explicit null to indicate full day.
-        daySlots: (() => {
+        hallName: selectedHall || selectedHallObj?.name, slot: "DayRange", slotTitle, bookingName, email, department, phone, status: "PENDING", remarks: DEFAULT_REMARKS, appliedAt: nowIso, startDate: ymd(startDate), endDate: ymd(endDate), daySlots: (() => {
           const dList = listDatesBetween(startDate, endDate);
           const out = {};
           dList.forEach((d) => {
@@ -447,7 +450,7 @@ export default function DeptAddSeminarPage() {
              if (ds && ds.startTime && ds.endTime) {
                  out[k] = { startTime: ds.startTime, endTime: ds.endTime };
              } else {
-                 out[k] = null; // Full Day
+                 out[k] = null;
              }
           });
           return out;
